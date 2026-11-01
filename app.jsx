@@ -499,10 +499,10 @@ function Navbar({ onOpenMenu }) {
           </Link>
           <ThemeToggle />
           <button aria-label="Menu" onClick={onOpenMenu}
-            className="glass grid h-10 w-10 place-items-center rounded-full md:hidden">
+            className={'glass grid h-10 w-10 place-items-center rounded-full md:hidden ' + (scrolled ? 'text-ink-900' : 'text-white')}>
             <span className="flex flex-col gap-1">
-              <span className="block h-px w-4 bg-bone-50" />
-              <span className="block h-px w-4 bg-bone-50" />
+              <span className="block h-px w-4 bg-current" />
+              <span className="block h-px w-4 bg-current" />
             </span>
           </button>
         </div>
@@ -609,7 +609,6 @@ function Footer() {
         <div className="mx-auto flex w-[min(1500px,94vw)] flex-col items-center justify-between gap-3 px-2 py-6 stamp text-ink-700/60 md:flex-row">
           <span>© ADAS ARCHITECTURE · MMXX — MMXXVI · ALL RIGHTS RESERVED</span>
           <span>DESIGNED WITH ♥ IN JEDDAH</span>
-          <span>KONAMI: ↑↑↓↓←→←→BA</span>
         </div>
       </div>
     </footer>
@@ -717,8 +716,8 @@ function HomeHero() {
         <div className="grid grid-cols-12 items-end gap-6">
           <div className="col-span-12 md:col-span-9">
             <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 1 }} className="stamp mb-6 text-gold-300">
-              ARCHITECTURE · INTERIOR DESIGN · INNOVATION
+              transition={{ delay: 0.6, duration: 1 }} className="stamp mb-3 text-gold-300 md:mb-6">
+              ARCHITECTURE · INTERIORS
             </motion.p>
             <h1 className="font-display text-[clamp(2.6rem,7.5vw,7.5rem)] font-light leading-[0.95] text-white">
               <SplitHeading text="Spaces that" delay={0.3} />{' '}
@@ -729,9 +728,8 @@ function HomeHero() {
               <SplitHeading text="lives that flourish" delay={0.7} />
             </h1>
             <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.4, duration: 1 }}
-              className="mt-8 max-w-xl text-base leading-relaxed text-white/85 md:text-lg">
-              ADAS is a premier architecture and interior design studio crafting
-              environments of lasting distinction across Saudi Arabia and beyond.
+              className="mt-8 hidden max-w-xl text-base leading-relaxed text-white/85 md:block md:text-lg">
+              Architecture and interiors, crafted across Saudi Arabia.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.6, duration: 1 }}
               className="mt-10 flex flex-wrap items-center gap-4">
@@ -741,7 +739,7 @@ function HomeHero() {
                 <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
               </Link>
               <Link to="/contact"
-                className="magnetic-btn inline-flex items-center gap-3 rounded-full border border-white/40 px-7 py-3.5 text-[12px] uppercase tracking-widest-2 text-white transition hover:border-gold-300 hover:text-gold-300">
+                className="magnetic-btn hidden items-center gap-3 rounded-full border border-white/40 px-7 py-3.5 text-[12px] uppercase tracking-widest-2 text-white transition hover:border-gold-300 hover:text-gold-300 md:inline-flex">
                 <span className="grid h-5 w-5 place-items-center rounded-full border border-current">
                   <span className="block h-0 w-0 border-y-[4px] border-l-[6px] border-y-transparent border-l-current" />
                 </span>
@@ -749,7 +747,7 @@ function HomeHero() {
               </Link>
             </motion.div>
           </div>
-          <div className="col-span-12 md:col-span-3">
+          <div className="hidden md:col-span-3 md:block">
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.8, duration: 1 }}
               className="glass relative overflow-hidden rounded-2xl p-5">
               <span className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-lilac-400 to-transparent" />
@@ -765,7 +763,7 @@ function HomeHero() {
       </motion.div>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2 }}
-        className="pointer-events-none absolute inset-x-0 bottom-6 flex items-center justify-center">
+        className="pointer-events-none absolute inset-x-0 bottom-6 hidden items-center justify-center md:flex">
         <div className="flex flex-col items-center gap-2">
           <span className="stamp text-white/70">SCROLL</span>
           <div className="relative h-10 w-px overflow-hidden bg-white/20">
@@ -782,7 +780,7 @@ function HomeHero() {
 function Marquee() {
   return (
     <div className="overflow-hidden border-y border-ink-900/10 bg-bone-100/40 py-5">
-      <div className="marquee-track flex w-max gap-16 whitespace-nowrap stamp text-bone-200/70">
+      <div className="marquee-track flex w-max gap-16 whitespace-nowrap stamp text-lilac-500">
         {[...PRESS, ...PRESS, ...PRESS].map((p, i) => (
           <span key={i} className="flex items-center gap-16">
             <span className="text-ink-700/50">◆</span>
@@ -838,7 +836,7 @@ function PhilosophyStrip() {
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const x = useTransform(scrollYProgress, [0, 1], ['10%', '-30%']);
   return (
-    <section ref={ref} className="relative overflow-hidden py-32">
+    <section ref={ref} className="relative overflow-hidden py-16 md:py-24">
       <motion.div style={{ x }}
         className="font-display text-[12vw] leading-none text-ink-900/[0.05] whitespace-nowrap">
         Architecture · Interiors · Urbanism · Visualization ·
@@ -853,17 +851,43 @@ function PhilosophyStrip() {
             </h2>
           </Reveal>
         </div>
-        <div className="col-span-12 grid grid-cols-1 gap-10 md:col-span-8 md:grid-cols-2">
+        <div className="col-span-12 grid grid-cols-2 gap-4 md:col-span-8 md:grid-cols-4 md:gap-6">
           {[
-            { t: 'Cinematic', d: 'We design as a film director composes a frame — light, line, shadow and silence as raw material.' },
-            { t: 'Considered', d: 'Each building begins with a question, not a brief. We refuse to draw what we have not first defended.' },
-            { t: 'Crafted', d: 'From the joinery to the masterplan, we sweat the millimetres. Buildings are read at arms length.' },
-            { t: 'Climate-Aware', d: 'Every line carries an embodied carbon cost. We design like the next century is already here.' },
+            { t: 'Cinematic', icon: (
+              <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="24" cy="24" r="14" />
+                <circle cx="24" cy="24" r="4" />
+                <path d="M24 10v4M24 34v4M10 24h4M34 24h4M14 14l3 3M34 14l-3 3M14 34l3-3M34 34l-3-3" />
+              </svg>
+            ) },
+            { t: 'Considered', icon: (
+              <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="24" cy="24" r="14" />
+                <path d="M19 19a5 5 0 1 1 7 4.5c-1.5.8-2 2-2 3.5" />
+                <circle cx="24" cy="33" r="1" fill="currentColor" />
+              </svg>
+            ) },
+            { t: 'Crafted', icon: (
+              <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M24 6l-2 22h4L24 6z" />
+                <path d="M15 40l9-12 9 12" />
+                <path d="M12 44h24" />
+                <path d="M20 44v-6M28 44v-6" />
+              </svg>
+            ) },
+            { t: 'Climate-Aware', icon: (
+              <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M24 8c7 6 11 11 11 18a11 11 0 0 1-22 0c0-7 4-12 11-18z" />
+                <path d="M24 22v12M24 28l-4-3M24 28l4-3" />
+              </svg>
+            ) },
           ].map((b, i) => (
             <Reveal key={b.t} delay={i * 0.08}>
-              <div className="border-t border-ink-900/12 pt-5">
-                <p className="font-titling text-2xl text-gold-300">{b.t}</p>
-                <p className="mt-3 text-ink-800/70">{b.d}</p>
+              <div className="group flex flex-col items-center text-center">
+                <span className="grid h-16 w-16 place-items-center rounded-full border border-ink-900/10 bg-white text-gold-600 shadow-sm transition group-hover:border-gold-400 group-hover:text-gold-700 group-hover:shadow-md md:h-20 md:w-20">
+                  {b.icon}
+                </span>
+                <p className="mt-3 font-titling text-base text-ink-900 md:text-lg">{b.t}</p>
               </div>
             </Reveal>
           ))}
@@ -884,7 +908,7 @@ function FeaturedSlider() {
   }, []);
   const p = featured[i];
   return (
-    <section className="relative overflow-hidden bg-white py-28">
+    <section className="relative overflow-hidden bg-white py-14 md:py-24">
       <div className="mx-auto w-[min(1500px,94vw)]">
         <div className="flex items-end justify-between">
           <div>
@@ -975,19 +999,17 @@ function BlueprintSection() {
       photo: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=900&q=80' },
   ];
   return (
-    <section className="relative overflow-hidden bg-bone-100/40 py-28">
-      <div className="mx-auto grid w-[min(1500px,94vw)] grid-cols-12 gap-10">
+    <section className="relative overflow-hidden bg-bone-100/40 py-14 md:py-24">
+      <div className="mx-auto grid w-[min(1500px,94vw)] grid-cols-12 gap-6 md:gap-10">
         <div className="col-span-12 lg:col-span-4">
           <p className="stamp text-gold-300">— ANATOMY OF A PROJECT</p>
           <Reveal>
-            <h2 className="mt-3 font-display text-4xl leading-tight md:text-5xl">
+            <h2 className="mt-3 font-display text-3xl leading-tight md:text-5xl">
               Step inside a <span className="font-titling not-italic font-medium text-gold-500">working blueprint</span>.
             </h2>
           </Reveal>
-          <p className="mt-6 max-w-md text-ink-800/70">
-            Click a room name to see how it looks in the real world. Every room we draw
-            has a story — and a number. This is the ground floor of Atelier 9, our Paris
-            residence on Rue de Sévigné.
+          <p className="mt-4 max-w-md text-sm text-ink-800/70 md:mt-6 md:text-base">
+            Tap a room to see it in the real world.
           </p>
           <div className="mt-8 space-y-3">
             {rooms.map((r) => (
@@ -1100,42 +1122,79 @@ function BlueprintSection() {
 
 function ProcessSection() {
   const steps = [
-    { n: '01', t: 'Listen', d: 'A long conversation about site, brief, climate and ambition.' },
-    { n: '02', t: 'Draw', d: 'Sketches by hand, then in plan, section and model — all in dialogue.' },
-    { n: '03', t: 'Test', d: 'We build the building four times in software before we touch a stone.' },
-    { n: '04', t: 'Deliver', d: 'On site, in fabrication, at every joint. We do not leave the room.' },
+    {
+      n: '01', t: 'Listen',
+      icon: (
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 20a10 10 0 0 1 20 0v6a4 4 0 0 1-4 4h-2v-10h4" />
+          <path d="M14 20v6a4 4 0 0 0 4 4h2V20h-6" />
+          <path d="M14 30v2a6 6 0 0 0 6 6h2" />
+        </svg>
+      ),
+    },
+    {
+      n: '02', t: 'Draw',
+      icon: (
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 40l6-2 20-20-4-4L10 34l-2 6z" />
+          <path d="M28 14l4 4" />
+          <path d="M34 8l6 6" />
+        </svg>
+      ),
+    },
+    {
+      n: '03', t: 'Test',
+      icon: (
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="8" y="10" width="32" height="24" rx="2" />
+          <path d="M8 16h32" />
+          <circle cx="12" cy="13" r="0.8" fill="currentColor" />
+          <circle cx="15" cy="13" r="0.8" fill="currentColor" />
+          <path d="M18 24l4 4 8-8" />
+          <path d="M18 40h12" />
+        </svg>
+      ),
+    },
+    {
+      n: '04', t: 'Deliver',
+      icon: (
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 32l12-20 12 20" />
+          <path d="M4 36h40" />
+          <path d="M14 36v-6h12v6" />
+          <path d="M28 36v-10h10v10" />
+        </svg>
+      ),
+    },
   ];
   return (
-    <section className="relative py-28">
+    <section className="relative py-16 md:py-24">
       <div className="mx-auto w-[min(1500px,94vw)]">
-        <div className="grid grid-cols-12 items-end gap-6">
-          <div className="col-span-12 md:col-span-6">
-            <p className="stamp text-gold-300">— THE METHOD</p>
-            <Reveal>
-              <h2 className="mt-3 font-display text-5xl leading-tight md:text-6xl">
-                Four rooms in <span className="font-titling not-italic font-medium text-gold-500">one house</span>.
-              </h2>
-            </Reveal>
-          </div>
-          <p className="col-span-12 max-w-md text-ink-800/70 md:col-span-6">
-            We do not split design and delivery. The same team that draws the first
-            line walks the building on opening day.
-          </p>
+        <div className="text-center md:text-left">
+          <p className="stamp text-gold-300 md:text-left">— THE METHOD</p>
+          <Reveal>
+            <h2 className="mt-3 font-display text-4xl leading-tight md:text-6xl">
+              Four rooms in <span className="font-titling not-italic font-medium text-gold-500">one house</span>.
+            </h2>
+          </Reveal>
         </div>
-        <div className="mt-16 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-ink-900/10 bg-ink-900/5 md:grid-cols-4">
-          {steps.map((s, i) => (
-            <Reveal key={s.n} delay={i * 0.08}>
-              <div className="group relative h-full overflow-hidden bg-white p-8 md:p-10">
-                <div className="absolute -right-6 -top-6 font-titling font-black text-[8rem] leading-none text-gold-400/[0.06] transition-colors duration-500 group-hover:text-gold-400/20">
-                  {s.n}
+
+        {/* Icon rail with connecting line */}
+        <div className="relative mt-12 md:mt-16">
+          <span className="pointer-events-none absolute left-10 right-10 top-10 hidden h-px bg-gradient-to-r from-transparent via-gold-400/40 to-transparent md:block" />
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
+            {steps.map((s, i) => (
+              <Reveal key={s.n} delay={i * 0.08}>
+                <div className="group relative flex flex-col items-center text-center">
+                  <span className="relative grid h-20 w-20 place-items-center rounded-full border border-ink-900/10 bg-white text-gold-600 shadow-sm transition group-hover:border-gold-400 group-hover:text-gold-700 group-hover:shadow-md md:h-24 md:w-24">
+                    {s.icon}
+                    <span className="absolute -top-2 right-0 stamp rounded-full bg-gold-400 px-2 py-0.5 text-[9px] text-ink-900">{s.n}</span>
+                  </span>
+                  <h3 className="mt-4 font-display text-2xl text-ink-900 md:text-3xl">{s.t}</h3>
                 </div>
-                <p className="stamp text-gold-300">{s.n}</p>
-                <h3 className="mt-3 font-display text-3xl text-ink-900">{s.t}</h3>
-                <p className="mt-3 text-ink-800/70">{s.d}</p>
-                <div className="mt-6 h-px w-12 bg-gold-300 transition-all duration-500 group-hover:w-24" />
-              </div>
-            </Reveal>
-          ))}
+              </Reveal>
+            ))}
+          </div>
         </div>
       </div>
     </section>
