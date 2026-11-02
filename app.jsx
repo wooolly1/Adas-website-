@@ -83,7 +83,7 @@ function NavLink({ to, children, className, onClick, end = false, ...rest }) {
  * ==========================================================*/
 
 const PROJECTS = [
-  { id: 'private-palace', disciplines: ['Architecture'], title: 'Palace 1', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Landscape', role: 'Architecture · Landscape', status: 'Design · 3D Visualisation', tagline: 'A private palace set within layered gardens, opening onto a sunlit pool court.',
+  { id: 'private-palace', disciplines: ['Architecture'], title: "Yousif's Palace", category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Landscape', role: 'Architecture · Landscape', status: 'Design · 3D Visualisation', tagline: 'A private palace set within layered gardens, opening onto a sunlit pool court.',
     description: [
       'A family palace in Jeddah composed as a sequence of calm, stone-clad volumes. Deep overhangs and timber soffits shade the glazing, while the main living spaces open directly onto a generous pool court with in-water loungers and timber decks.',
       'Landscape is treated as architecture: olive trees, palms and bougainvillea frame the entrances, and a curved garden walk leads the family from the gate to the outdoor lounges.',
@@ -91,7 +91,7 @@ const PROJECTS = [
     img: './projects/private-palace-1/01.webp',
     gallery: Array.from({ length: 12 }, (_, i) => `./projects/private-palace-1/${String(i + 1).padStart(2, '0')}.webp`),
     span: 'tall' },
-  { id: 'private-palace-2', disciplines: ['Architecture'], title: 'Palace 2', category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'One family palace, two façade studies: layered stone at dusk, classical white by day.',
+  { id: 'private-palace-2', disciplines: ['Architecture'], title: "Abdullah's Palace", category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'One family palace, two façade studies: layered stone at dusk, classical white by day.',
     description: [
       'A family palace of linked residences set behind a continuous garden wall, developed through two façade options. The first layers travertine-toned stone, carved timber screens and warm concealed lighting into a composition that comes alive at dusk.',
       'The second is a classical white scheme of tall framed bays, crisp cornices and timber mashrabiya panels, with a grand double-height entrance and a formal timber door at its centre.',
@@ -107,7 +107,7 @@ const PROJECTS = [
     img: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
   { id: 'al-ula-resort', disciplines: ['Architecture'], title: 'Al Ula Resort', category: 'Hospitality & Admin', year: '2024', location: 'Al Ula, KSA', size: 'Hospitality Masterplan', role: 'Architecture · Landscape', tagline: 'Suites quarried into sandstone, framing a thousand-year horizon.',
     img: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'private-villa', disciplines: ['Architecture'], title: 'Villa 1', category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A contemporary family villa that reinterprets the Hijazi façade.',
+  { id: 'private-villa', disciplines: ['Architecture'], title: "Dania's Villa", category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A contemporary family villa that reinterprets the Hijazi façade.',
     description: [
       'A family villa composed of stepped, lime-white volumes that give the street a calm, layered façade. Timber mashrabiya screens and stone-clad towers mark the principal rooms, filtering the sun while keeping the interiors private.',
       'Perforated masonry panels, recessed windows and a low garden wall soften the edge between home and street, with covered parking tucked discreetly into the base.',
@@ -115,7 +115,7 @@ const PROJECTS = [
     img: './projects/villa-1/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-1/${String(i + 1).padStart(2, '0')}.webp`),
     span: 'normal' },
-  { id: 'villa-2', disciplines: ['Architecture'], title: 'Villa 2', category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A symmetrical villa façade framed in light stone and carved timber.',
+  { id: 'villa-2', disciplines: ['Architecture'], title: "Amnah's Villa", category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A symmetrical villa façade framed in light stone and carved timber.',
     description: [
       'A family villa organised around a calm, symmetrical street façade. Deep cream-plaster frames step forward to hold tall windows, each veiled by geometric timber screens that bring privacy and dappled light to the rooms behind.',
       'A carved stone panel marks the centre of the composition, and at dusk concealed uplighting turns the frames into a soft, glowing lantern above the garden wall and covered parking.',
@@ -123,7 +123,7 @@ const PROJECTS = [
     img: './projects/villa-2/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-2/${String(i + 1).padStart(2, '0')}.webp`),
     span: 'normal' },
-  { id: 'villa-3', disciplines: ['Architecture'], title: 'Villa 3', category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A garden villa crowned by a double-height arched window.',
+  { id: 'villa-3', disciplines: ['Architecture'], title: "Gaith's Villa", category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A garden villa crowned by a double-height arched window.',
     description: [
       'A compact family villa composed around a tall arched window that lights the main stair and living hall. A perforated stone screen beside it filters the afternoon sun, and a planted roof terrace softens the skyline.',
       'At street level, a timber pergola and bougainvillea frame the arched front door, while a sliding timber gate lets the forecourt switch between a welcoming entrance and private parking.',
@@ -131,7 +131,7 @@ const PROJECTS = [
     img: './projects/villa-3/01.webp',
     gallery: ['./projects/villa-3/01.webp', './projects/villa-3/02.webp'],
     span: 'normal' },
-  { id: 'villa-4', disciplines: ['Architecture'], title: 'Villa 4', category: 'Residential', year: '2025', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'Warm stone, dark frames and a quiet, lantern-lit entrance.',
+  { id: 'villa-4', disciplines: ['Architecture'], title: "Assim's Villa", category: 'Residential', year: '2025', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'Warm stone, dark frames and a quiet, lantern-lit entrance.',
     description: [
       'A contemporary family villa built from warm stone volumes and deep, dark-framed openings, topped by a glazed roof pavilion that opens onto the terrace.',
       'The approach is choreographed as a sequence: floating lit steps lead to a tall pivot door beside a textured feature wall, while the boundary wall alternates timber fins, planted green strips and a softly backlit stone panel.',
@@ -139,7 +139,7 @@ const PROJECTS = [
     img: './projects/villa-4/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-4/${String(i + 1).padStart(2, '0')}.webp`),
     span: 'normal' },
-  { id: 'villa-5', disciplines: ['Architecture'], title: 'Villa 5', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A modern villa that turns inward to a light-filled pool court.',
+  { id: 'villa-5', disciplines: ['Architecture'], title: "Khalid's Villa", category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A modern villa that turns inward to a light-filled pool court.',
     description: [
       'A modern family villa with a composed, cubic street front: pale stone volumes, a dark vertical feature panel and slim black window frames, set behind a low lit garden wall.',
       'Inside the plot the house opens up. Double-height glazing wraps a private courtyard with a long plunge pool, sheltered by a deep timber-lined canopy that keeps the living spaces shaded and connected to the water.',
@@ -803,7 +803,7 @@ function HomeHero() {
               className="glass relative overflow-hidden rounded-2xl p-5">
               <span className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-lilac-400 to-transparent" />
               <p className="stamp font-medium text-lilac-600">Now Drawing</p>
-              <p className="mt-2 font-display text-2xl text-ink-900">Palace 1</p>
+              <p className="mt-2 font-display text-2xl text-ink-900">Yousif's Palace</p>
               <p className="mt-1 text-xs text-ink-800/80">Jeddah · Residential</p>
               <div className="mt-4 grid grid-cols-2 gap-2 stamp text-ink-700">
                 <span>KSA</span><span>2023</span>
