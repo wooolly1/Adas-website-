@@ -83,7 +83,7 @@ function NavLink({ to, children, className, onClick, end = false, ...rest }) {
  * ==========================================================*/
 
 const PROJECTS = [
-  { id: 'private-palace', disciplines: ['Architecture'], title: 'Private Palace 1', category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture & Landscape', role: 'Architecture · Landscape', status: 'Design · 3D Visualisation', tagline: 'A private palace set within layered gardens, opening onto a sunlit pool court.',
+  { id: 'private-palace', disciplines: ['Architecture'], title: 'Palace 1', category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture & Landscape', role: 'Architecture · Landscape', status: 'Design · 3D Visualisation', tagline: 'A private palace set within layered gardens, opening onto a sunlit pool court.',
     description: [
       'A family palace in Jeddah composed as a sequence of calm, stone-clad volumes. Deep overhangs and timber soffits shade the glazing, while the main living spaces open directly onto a generous pool court with in-water loungers and timber decks.',
       'Landscape is treated as architecture: olive trees, palms and bougainvillea frame the entrances, and a curved garden walk leads the family from the gate to the outdoor lounges.',
@@ -763,10 +763,10 @@ function HomeHero() {
               className="glass relative overflow-hidden rounded-2xl p-5">
               <span className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-lilac-400 to-transparent" />
               <p className="stamp font-medium text-lilac-600">Now Drawing</p>
-              <p className="mt-2 font-display text-2xl text-ink-900">Private Palace</p>
+              <p className="mt-2 font-display text-2xl text-ink-900">Palace 1</p>
               <p className="mt-1 text-xs text-ink-800/80">Jeddah · Residential</p>
               <div className="mt-4 grid grid-cols-2 gap-2 stamp text-ink-700">
-                <span>KSA</span><span>2023</span>
+                <span>KSA</span><span>2024</span>
               </div>
             </motion.div>
           </div>
