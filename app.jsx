@@ -133,6 +133,14 @@ const PROJECTS = [
     img: './projects/villa-4/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-4/${String(i + 1).padStart(2, '0')}.webp`),
     span: 'normal' },
+  { id: 'villa-5', disciplines: ['Architecture'], title: 'Villa 5', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A modern villa that turns inward to a light-filled pool court.',
+    description: [
+      'A modern family villa with a composed, cubic street front: pale stone volumes, a dark vertical feature panel and slim black window frames, set behind a low lit garden wall.',
+      'Inside the plot the house opens up. Double-height glazing wraps a private courtyard with a long plunge pool, sheltered by a deep timber-lined canopy that keeps the living spaces shaded and connected to the water.',
+    ],
+    img: './projects/villa-5/01.webp',
+    gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-5/${String(i + 1).padStart(2, '0')}.webp`),
+    span: 'normal' },
   { id: 'gamekom-event', disciplines: ['Interior Design'], title: 'Gamekom Event', category: 'Commercial & Entertainment', year: '2024', location: 'Jeddah, KSA', size: 'Experiential Interior', role: 'Interior · Experience', tagline: 'A high-energy event arena designed as a single, cinematic stage.',
     img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
   { id: 'magadeer', disciplines: ['Interior Design'], title: 'Magadeer Restaurant', category: 'Commercial & Entertainment', year: '2023', location: 'Madina, KSA', size: 'F&B Interior', role: 'Interior Architecture', tagline: 'A modern hijazi restaurant in the heart of Al-Madinah.',
@@ -1888,9 +1896,13 @@ function ProjectModal({ project, onClose }) {
         className="glass relative max-h-[88vh] w-[min(1100px,96vw)] overflow-y-auto rounded-2xl">
         <div className="relative aspect-[16/9] overflow-hidden">
           <AnimatePresence initial={false} mode="popLayout">
-            <motion.img key={images[idx]} src={images[idx]} alt={`${project.title} — view ${idx + 1}`}
+            <motion.div key={images[idx]}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}
-              className="absolute inset-0 h-full w-full object-cover" />
+              className="absolute inset-0 bg-ink-950">
+              {/* blurred fill so non-16:9 images are shown whole, not cropped */}
+              <img src={images[idx]} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl" />
+              <img src={images[idx]} alt={`${project.title} — view ${idx + 1}`} className="absolute inset-0 h-full w-full object-contain" />
+            </motion.div>
           </AnimatePresence>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink-950/90 via-transparent to-transparent" />
           {images.length > 1 && (
