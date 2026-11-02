@@ -465,6 +465,8 @@ function ThemeToggle() {
 function Navbar({ onOpenMenu }) {
   const { scrollY } = useScroll();
   const [scrolled, setScrolled] = useState(false);
+  const { path } = useContext(RouterCtx);
+  const overHero = path === '/' && !scrolled;
   useEffect(() => {
     const unsub = scrollY.on('change', (v) => setScrolled(v > 30));
     return () => unsub();
@@ -485,16 +487,16 @@ function Navbar({ onOpenMenu }) {
             <NavLink key={n.to} to={n.to} end={n.to === '/'}
               className={({ isActive }) =>
                 'nav-link relative px-5 py-2 text-[12px] uppercase tracking-widest-2 ' +
-                (isActive ? 'active text-gold-300' : 'text-ink-800/80 hover:text-ink-900')
+                (isActive ? 'active text-gold-300' : overHero ? 'text-white/85 hover:text-white' : 'text-ink-800/80 hover:text-ink-900')
               }>
-              <span className="mr-2 font-mono text-[10px] text-ink-700/50">{n.i}</span>
+              <span className={'mr-2 font-mono text-[10px] ' + (overHero ? 'text-white/50' : 'text-ink-700/50')}>{n.i}</span>
               {n.label}
             </NavLink>
           ))}
         </nav>
         <div className="flex items-center gap-3">
           <Link to="/contact"
-            className="magnetic-btn hidden rounded-full border border-gold-400/40 px-5 py-2 text-[11px] uppercase tracking-widest-2 text-gold-300 transition hover:bg-gold-400/10 md:inline-flex">
+            className="magnetic-btn hidden rounded-full border border-gold-400/40 px-5 py-2 text-[11px] font-medium uppercase tracking-widest-2 text-gold-300 transition hover:bg-gold-400/10 md:inline-flex">
             Start a Project
           </Link>
           <ThemeToggle />
@@ -696,27 +698,25 @@ function HomeHero() {
           objectPosition="center 38%"
           alt="ADAS architecture — pool and villa at dusk"
           className="h-full w-full" />
-        <div className="absolute inset-0 bg-gradient-to-b from-ink-950/40 via-ink-950/30 to-ink-950" />
-        <div className="absolute inset-0 bg-gradient-to-r from-ink-950/70 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-ink-950/55 via-ink-950/40 to-ink-950" />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink-950/80 via-ink-950/20 to-transparent" />
       </motion.div>
       <FloatingParticles count={22} />
       <div className="pointer-events-none absolute inset-0">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6, duration: 1.6 }}
-          className="absolute right-[6%] top-[18%] h-44 w-44 border border-gold-400/30" />
+          className="absolute right-[6%] top-[18%] hidden h-44 w-44 md:block border border-gold-400/30" />
         <motion.div initial={{ opacity: 0, rotate: 0 }} animate={{ opacity: 1, rotate: 360 }}
           transition={{ delay: 0.8, duration: 90, ease: 'linear', repeat: Infinity }}
-          className="absolute right-[10%] top-[22%] h-32 w-32 border border-lilac-400/55"
+          className="absolute right-[10%] top-[22%] hidden h-32 w-32 md:block border border-lilac-400/55"
           style={{ borderRadius: '40% 60% 50% 50% / 50% 40% 60% 50%' }} />
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1, duration: 1.4 }}
-          className="absolute left-[8%] bottom-[18%] h-20 w-20 border border-lilac-400/45" />
       </div>
 
       <motion.div style={{ opacity }}
-        className="relative z-10 mx-auto flex h-full w-[min(1500px,94vw)] flex-col justify-end pb-20 md:pb-28">
+        className="relative z-10 mx-auto flex h-full w-[min(1500px,94vw)] flex-col justify-end pb-28 md:pb-28">
         <div className="grid grid-cols-12 items-end gap-6">
           <div className="col-span-12 md:col-span-9">
             <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 1 }} className="stamp mb-3 text-gold-300 md:mb-6">
+              transition={{ delay: 0.6, duration: 1 }} className="stamp mb-4 font-medium text-gold-300 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] md:mb-6">
               ARCHITECTURE · INTERIORS
             </motion.p>
             <h1 className="font-display text-[clamp(2.6rem,7.5vw,7.5rem)] font-light leading-[0.95] text-white">
@@ -728,18 +728,18 @@ function HomeHero() {
               <SplitHeading text="lives that flourish" delay={0.7} />
             </h1>
             <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.4, duration: 1 }}
-              className="mt-8 hidden max-w-xl text-base leading-relaxed text-white/85 md:block md:text-lg">
+              className="mt-5 max-w-xl text-base leading-relaxed text-white/90 md:mt-8 md:text-lg">
               Architecture and interiors, crafted across Saudi Arabia.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.6, duration: 1 }}
-              className="mt-10 flex flex-wrap items-center gap-4">
+              className="mt-7 flex flex-wrap items-center gap-3 md:mt-10 md:gap-4">
               <Link to="/projects"
-                className="magnetic-btn group relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-gold-400 px-7 py-3.5 text-[12px] uppercase tracking-widest-2 text-ink-950 transition hover:bg-gold-300">
+                className="magnetic-btn group relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-gold-400 px-6 py-3.5 text-[11px] md:px-7 md:text-[12px] uppercase tracking-widest-2 text-ink-950 transition hover:bg-gold-300">
                 <span>Explore Portfolio</span>
                 <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
               </Link>
               <Link to="/contact"
-                className="magnetic-btn hidden items-center gap-3 rounded-full border border-white/40 px-7 py-3.5 text-[12px] uppercase tracking-widest-2 text-white transition hover:border-gold-300 hover:text-gold-300 md:inline-flex">
+                className="magnetic-btn inline-flex items-center gap-3 rounded-full border border-white/50 bg-ink-950/30 px-6 py-3.5 text-[11px] uppercase tracking-widest-2 text-white backdrop-blur-sm transition hover:border-gold-300 hover:text-gold-300 md:px-7 md:text-[12px]">
                 <span className="grid h-5 w-5 place-items-center rounded-full border border-current">
                   <span className="block h-0 w-0 border-y-[4px] border-l-[6px] border-y-transparent border-l-current" />
                 </span>
@@ -747,14 +747,14 @@ function HomeHero() {
               </Link>
             </motion.div>
           </div>
-          <div className="hidden md:col-span-3 md:block">
+          <div className="hidden md:col-span-3 md:mb-16 md:block">
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.8, duration: 1 }}
               className="glass relative overflow-hidden rounded-2xl p-5">
               <span className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-lilac-400 to-transparent" />
-              <p className="stamp text-lilac-500">Now Drawing</p>
+              <p className="stamp font-medium text-lilac-600">Now Drawing</p>
               <p className="mt-2 font-display text-2xl text-ink-900">Private Palace</p>
-              <p className="mt-1 text-xs text-ink-800/60">Jeddah · Residential</p>
-              <div className="mt-4 grid grid-cols-2 gap-2 stamp text-ink-700/70">
+              <p className="mt-1 text-xs text-ink-800/80">Jeddah · Residential</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 stamp text-ink-700">
                 <span>KSA</span><span>2023</span>
               </div>
             </motion.div>
