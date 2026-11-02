@@ -155,8 +155,14 @@ const PROJECTS = [
     img: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
   { id: 'makkiyon-sales-office', disciplines: ['Interior Design'], title: 'Makkiyon Sales Office', category: 'Hospitality & Admin', year: '2024', location: 'Jeddah, KSA', size: 'Sales Office Interior', role: 'Interior · Workplace', tagline: 'A residential sales gallery that tells the story of the homes it sells.',
     img: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'private-palace-2', disciplines: ['Architecture', 'Interior Design'], title: 'Palace 2', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture · Interiors', tagline: 'A private palace organised around light, water and stone.',
-    img: 'https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
+  { id: 'private-palace-2', disciplines: ['Architecture'], title: 'Palace 2', category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'One family palace, two façade studies: layered stone at dusk, classical white by day.',
+    description: [
+      'A family palace of linked residences set behind a continuous garden wall, developed through two façade options. The first layers travertine-toned stone, carved timber screens and warm concealed lighting into a composition that comes alive at dusk.',
+      'The second is a classical white scheme of tall framed bays, crisp cornices and timber mashrabiya panels, with a grand double-height entrance and a formal timber door at its centre.',
+    ],
+    img: './projects/palace-2/01.webp',
+    gallery: Array.from({ length: 10 }, (_, i) => `./projects/palace-2/${String(i + 1).padStart(2, '0')}.webp`),
+    span: 'normal' },
   { id: 'delta-coffee', disciplines: ['Interior Design'], title: 'Delta Coffee', category: 'Commercial & Entertainment', year: '2023', location: 'Jeddah, KSA', size: 'Café Interior', role: 'Interior Architecture', tagline: 'A specialty coffee bar designed at the scale of a hand.',
     img: 'https://images.unsplash.com/photo-1496564203457-11bb12075d90?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
 ];
