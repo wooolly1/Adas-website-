@@ -83,41 +83,46 @@ function NavLink({ to, children, className, onClick, end = false, ...rest }) {
  * ==========================================================*/
 
 const PROJECTS = [
-  { id: 'private-palace', title: 'Private Palace', category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Lead Architect · Interiors', tagline: 'A private palace where Hijazi tradition meets contemporary restraint.',
+  { id: 'private-palace', disciplines: ['Architecture', 'Interior Design'], title: 'Private Palace', category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Lead Architect · Interiors', tagline: 'A private palace where Hijazi tradition meets contemporary restraint.',
     img: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80', span: 'tall' },
-  { id: 'lulus-recipe-obhur', title: "Lulu's Recipe — Obhur", category: 'Commercial & Entertainment', year: '2023', location: 'Obhur, Jeddah', size: 'Interior · Fit-out', role: 'Interior Architecture', tagline: 'A coastal flagship for a beloved family-recipe brand.',
+  { id: 'lulus-recipe-obhur', disciplines: ['Interior Design'], title: "Lulu's Recipe — Obhur", category: 'Commercial & Entertainment', year: '2023', location: 'Obhur, Jeddah', size: 'Interior · Fit-out', role: 'Interior Architecture', tagline: 'A coastal flagship for a beloved family-recipe brand.',
     img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1600&q=80', span: 'wide' },
-  { id: 'lulus-recipe-naeem', title: "Lulu's Recipe — Naeem", category: 'Commercial & Entertainment', year: '2024', location: 'Naeem, Jeddah', size: 'Interior · Fit-out', role: 'Interior Architecture', tagline: 'A second chapter for the family-recipe brand, drawn into the city.',
+  { id: 'lulus-recipe-naeem', disciplines: ['Interior Design'], title: "Lulu's Recipe — Naeem", category: 'Commercial & Entertainment', year: '2024', location: 'Naeem, Jeddah', size: 'Interior · Fit-out', role: 'Interior Architecture', tagline: 'A second chapter for the family-recipe brand, drawn into the city.',
     img: 'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'sub-and-ship', title: 'Sub & Ship', category: 'Commercial & Entertainment', year: '2024', location: 'Jeddah, KSA', size: 'F&B Interior', role: 'Interior Architecture', tagline: 'A submarine-themed sandwich bar — playful, compact, and tightly composed.',
+  { id: 'sub-and-ship', disciplines: ['Interior Design'], title: 'Sub & Ship', category: 'Commercial & Entertainment', year: '2024', location: 'Jeddah, KSA', size: 'F&B Interior', role: 'Interior Architecture', tagline: 'A submarine-themed sandwich bar — playful, compact, and tightly composed.',
     img: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'al-ula-resort', title: 'Al Ula Resort', category: 'Hospitality & Admin', year: '2024', location: 'Al Ula, KSA', size: 'Hospitality Masterplan', role: 'Architecture · Landscape', tagline: 'Suites quarried into sandstone, framing a thousand-year horizon.',
+  { id: 'al-ula-resort', disciplines: ['Architecture'], title: 'Al Ula Resort', category: 'Hospitality & Admin', year: '2024', location: 'Al Ula, KSA', size: 'Hospitality Masterplan', role: 'Architecture · Landscape', tagline: 'Suites quarried into sandstone, framing a thousand-year horizon.',
     img: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'private-house', title: 'Private House', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture · Interiors', tagline: 'A family house composed around a quiet inner courtyard.',
+  { id: 'private-house', disciplines: ['Architecture', 'Interior Design'], title: 'Private House', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture · Interiors', tagline: 'A family house composed around a quiet inner courtyard.',
     img: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=80', span: 'tall' },
-  { id: 'private-villa', title: 'Private Villa', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture', tagline: 'A contemporary villa balanced against the heat of the Red Sea coast.',
+  { id: 'private-villa', disciplines: ['Architecture'], title: 'Private Villa', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture', tagline: 'A contemporary villa balanced against the heat of the Red Sea coast.',
     img: 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'gamekom-event', title: 'Gamekom Event', category: 'Commercial & Entertainment', year: '2024', location: 'Jeddah, KSA', size: 'Experiential Interior', role: 'Interior · Experience', tagline: 'A high-energy event arena designed as a single, cinematic stage.',
+  { id: 'gamekom-event', disciplines: ['Interior Design'], title: 'Gamekom Event', category: 'Commercial & Entertainment', year: '2024', location: 'Jeddah, KSA', size: 'Experiential Interior', role: 'Interior · Experience', tagline: 'A high-energy event arena designed as a single, cinematic stage.',
     img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'magadeer', title: 'Magadeer Restaurant', category: 'Commercial & Entertainment', year: '2023', location: 'Madina, KSA', size: 'F&B Interior', role: 'Interior Architecture', tagline: 'A modern hijazi restaurant in the heart of Al-Madinah.',
+  { id: 'magadeer', disciplines: ['Interior Design'], title: 'Magadeer Restaurant', category: 'Commercial & Entertainment', year: '2023', location: 'Madina, KSA', size: 'F&B Interior', role: 'Interior Architecture', tagline: 'A modern hijazi restaurant in the heart of Al-Madinah.',
     img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1600&q=80', span: 'wide' },
-  { id: 'private-house-2', title: 'Private House 2', category: 'Residential', year: '2022', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture · Interiors', tagline: 'A house that carries old Jeddah forward, one detail at a time.',
+  { id: 'private-house-2', disciplines: ['Architecture', 'Interior Design'], title: 'Private House 2', category: 'Residential', year: '2022', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture · Interiors', tagline: 'A house that carries old Jeddah forward, one detail at a time.',
     img: 'https://images.unsplash.com/photo-1487958449943-2429e8be8625?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'snb-dammam', title: 'SNB Dammam HQ', category: 'Hospitality & Admin', year: '2024', location: 'Dammam, KSA', size: 'Corporate Interior', role: 'Interior · Workplace', tagline: 'A regional banking headquarters re-imagined as a place to think.',
+  { id: 'snb-dammam', disciplines: ['Interior Design'], title: 'SNB Dammam HQ', category: 'Hospitality & Admin', year: '2024', location: 'Dammam, KSA', size: 'Corporate Interior', role: 'Interior · Workplace', tagline: 'A regional banking headquarters re-imagined as a place to think.',
     img: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=1600&q=80', span: 'tall' },
-  { id: 'knowledge-city', title: 'Knowledge City Business Park', category: 'Hospitality & Admin', year: '2024', location: 'Riyadh, KSA', size: 'Mixed-use Masterplan', role: 'Architecture · Planning', tagline: 'A campus of working buildings stitched around a green spine.',
+  { id: 'knowledge-city', disciplines: ['Architecture'], title: 'Knowledge City Business Park', category: 'Hospitality & Admin', year: '2024', location: 'Riyadh, KSA', size: 'Mixed-use Masterplan', role: 'Architecture · Planning', tagline: 'A campus of working buildings stitched around a green spine.',
     img: 'https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1600&q=80', span: 'wide' },
-  { id: 'retail-park', title: 'Retail Park', category: 'Hospitality & Admin', year: '2024', location: 'Jeddah, KSA', size: 'Mixed-use Retail', role: 'Architecture · Interiors', tagline: 'An open-air retail park designed as a public, walkable courtyard.',
+  { id: 'retail-park', disciplines: ['Architecture', 'Interior Design'], title: 'Retail Park', category: 'Hospitality & Admin', year: '2024', location: 'Jeddah, KSA', size: 'Mixed-use Retail', role: 'Architecture · Interiors', tagline: 'An open-air retail park designed as a public, walkable courtyard.',
     img: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'makkiyon-sales-office', title: 'Makkiyon Sales Office', category: 'Hospitality & Admin', year: '2024', location: 'Jeddah, KSA', size: 'Sales Office Interior', role: 'Interior · Workplace', tagline: 'A residential sales gallery that tells the story of the homes it sells.',
+  { id: 'makkiyon-sales-office', disciplines: ['Interior Design'], title: 'Makkiyon Sales Office', category: 'Hospitality & Admin', year: '2024', location: 'Jeddah, KSA', size: 'Sales Office Interior', role: 'Interior · Workplace', tagline: 'A residential sales gallery that tells the story of the homes it sells.',
     img: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'private-palace-2', title: 'Private Palace 2', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture · Interiors', tagline: 'A private palace organised around light, water and stone.',
+  { id: 'private-palace-2', disciplines: ['Architecture', 'Interior Design'], title: 'Private Palace 2', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture · Interiors', tagline: 'A private palace organised around light, water and stone.',
     img: 'https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
-  { id: 'delta-coffee', title: 'Delta Coffee', category: 'Commercial & Entertainment', year: '2023', location: 'Jeddah, KSA', size: 'Café Interior', role: 'Interior Architecture', tagline: 'A specialty coffee bar designed at the scale of a hand.',
+  { id: 'delta-coffee', disciplines: ['Interior Design'], title: 'Delta Coffee', category: 'Commercial & Entertainment', year: '2023', location: 'Jeddah, KSA', size: 'Café Interior', role: 'Interior Architecture', tagline: 'A specialty coffee bar designed at the scale of a hand.',
     img: 'https://images.unsplash.com/photo-1496564203457-11bb12075d90?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
 ];
 
 const CATEGORIES = ['All', 'Residential', 'Commercial & Entertainment', 'Hospitality & Admin'];
+const SECTORS = CATEGORIES.slice(1);
+const DISCIPLINES = [
+  { key: 'Architecture', i: '01', blurb: 'Buildings, masterplans and the shells that hold a life.' },
+  { key: 'Interior Design', i: '02', blurb: 'Rooms, fit-outs and the details you touch every day.' },
+];
 
 const SERVICES = [
   { id: 's1', no: '01', name: 'Architecture Design', blurb: 'Buildings drawn with precision and purpose.',
@@ -465,6 +470,8 @@ function ThemeToggle() {
 function Navbar({ onOpenMenu }) {
   const { scrollY } = useScroll();
   const [scrolled, setScrolled] = useState(false);
+  const { path } = useContext(RouterCtx);
+  const overHero = path === '/' && !scrolled;
   useEffect(() => {
     const unsub = scrollY.on('change', (v) => setScrolled(v > 30));
     return () => unsub();
@@ -485,16 +492,16 @@ function Navbar({ onOpenMenu }) {
             <NavLink key={n.to} to={n.to} end={n.to === '/'}
               className={({ isActive }) =>
                 'nav-link relative px-5 py-2 text-[12px] uppercase tracking-widest-2 ' +
-                (isActive ? 'active text-gold-300' : 'text-ink-800/80 hover:text-ink-900')
+                (isActive ? 'active text-gold-300' : overHero ? 'text-white/85 hover:text-white' : 'text-ink-800/80 hover:text-ink-900')
               }>
-              <span className="mr-2 font-mono text-[10px] text-ink-700/50">{n.i}</span>
+              <span className={'mr-2 font-mono text-[10px] ' + (overHero ? 'text-white/50' : 'text-ink-700/50')}>{n.i}</span>
               {n.label}
             </NavLink>
           ))}
         </nav>
         <div className="flex items-center gap-3">
           <Link to="/contact"
-            className="magnetic-btn hidden rounded-full border border-gold-400/40 px-5 py-2 text-[11px] uppercase tracking-widest-2 text-gold-300 transition hover:bg-gold-400/10 md:inline-flex">
+            className="magnetic-btn hidden rounded-full border border-gold-400/40 px-5 py-2 text-[11px] font-medium uppercase tracking-widest-2 text-gold-300 transition hover:bg-gold-400/10 md:inline-flex">
             Start a Project
           </Link>
           <ThemeToggle />
@@ -696,27 +703,25 @@ function HomeHero() {
           objectPosition="center 38%"
           alt="ADAS architecture — pool and villa at dusk"
           className="h-full w-full" />
-        <div className="absolute inset-0 bg-gradient-to-b from-ink-950/40 via-ink-950/30 to-ink-950" />
-        <div className="absolute inset-0 bg-gradient-to-r from-ink-950/70 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-ink-950/55 via-ink-950/40 to-ink-950" />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink-950/80 via-ink-950/20 to-transparent" />
       </motion.div>
       <FloatingParticles count={22} />
       <div className="pointer-events-none absolute inset-0">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6, duration: 1.6 }}
-          className="absolute right-[6%] top-[18%] h-44 w-44 border border-gold-400/30" />
+          className="absolute right-[6%] top-[18%] hidden h-44 w-44 md:block border border-gold-400/30" />
         <motion.div initial={{ opacity: 0, rotate: 0 }} animate={{ opacity: 1, rotate: 360 }}
           transition={{ delay: 0.8, duration: 90, ease: 'linear', repeat: Infinity }}
-          className="absolute right-[10%] top-[22%] h-32 w-32 border border-lilac-400/55"
+          className="absolute right-[10%] top-[22%] hidden h-32 w-32 md:block border border-lilac-400/55"
           style={{ borderRadius: '40% 60% 50% 50% / 50% 40% 60% 50%' }} />
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1, duration: 1.4 }}
-          className="absolute left-[8%] bottom-[18%] h-20 w-20 border border-lilac-400/45" />
       </div>
 
       <motion.div style={{ opacity }}
-        className="relative z-10 mx-auto flex h-full w-[min(1500px,94vw)] flex-col justify-end pb-20 md:pb-28">
+        className="relative z-10 mx-auto flex h-full w-[min(1500px,94vw)] flex-col justify-end pb-28 md:pb-28">
         <div className="grid grid-cols-12 items-end gap-6">
           <div className="col-span-12 md:col-span-9">
             <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 1 }} className="stamp mb-3 text-gold-300 md:mb-6">
+              transition={{ delay: 0.6, duration: 1 }} className="stamp mb-4 font-medium text-gold-300 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] md:mb-6">
               ARCHITECTURE · INTERIORS
             </motion.p>
             <h1 className="font-display text-[clamp(2.6rem,7.5vw,7.5rem)] font-light leading-[0.95] text-white">
@@ -728,18 +733,18 @@ function HomeHero() {
               <SplitHeading text="lives that flourish" delay={0.7} />
             </h1>
             <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.4, duration: 1 }}
-              className="mt-8 hidden max-w-xl text-base leading-relaxed text-white/85 md:block md:text-lg">
+              className="mt-5 max-w-xl text-base leading-relaxed text-white/90 md:mt-8 md:text-lg">
               Architecture and interiors, crafted across Saudi Arabia.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.6, duration: 1 }}
-              className="mt-10 flex flex-wrap items-center gap-4">
+              className="mt-7 flex flex-wrap items-center gap-3 md:mt-10 md:gap-4">
               <Link to="/projects"
-                className="magnetic-btn group relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-gold-400 px-7 py-3.5 text-[12px] uppercase tracking-widest-2 text-ink-950 transition hover:bg-gold-300">
+                className="magnetic-btn group relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-gold-400 px-6 py-3.5 text-[11px] md:px-7 md:text-[12px] uppercase tracking-widest-2 text-ink-950 transition hover:bg-gold-300">
                 <span>Explore Portfolio</span>
                 <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
               </Link>
               <Link to="/contact"
-                className="magnetic-btn hidden items-center gap-3 rounded-full border border-white/40 px-7 py-3.5 text-[12px] uppercase tracking-widest-2 text-white transition hover:border-gold-300 hover:text-gold-300 md:inline-flex">
+                className="magnetic-btn inline-flex items-center gap-3 rounded-full border border-white/50 bg-ink-950/30 px-6 py-3.5 text-[11px] uppercase tracking-widest-2 text-white backdrop-blur-sm transition hover:border-gold-300 hover:text-gold-300 md:px-7 md:text-[12px]">
                 <span className="grid h-5 w-5 place-items-center rounded-full border border-current">
                   <span className="block h-0 w-0 border-y-[4px] border-l-[6px] border-y-transparent border-l-current" />
                 </span>
@@ -747,14 +752,14 @@ function HomeHero() {
               </Link>
             </motion.div>
           </div>
-          <div className="hidden md:col-span-3 md:block">
+          <div className="hidden md:col-span-3 md:mb-16 md:block">
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.8, duration: 1 }}
               className="glass relative overflow-hidden rounded-2xl p-5">
               <span className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-lilac-400 to-transparent" />
-              <p className="stamp text-lilac-500">Now Drawing</p>
+              <p className="stamp font-medium text-lilac-600">Now Drawing</p>
               <p className="mt-2 font-display text-2xl text-ink-900">Private Palace</p>
-              <p className="mt-1 text-xs text-ink-800/60">Jeddah · Residential</p>
-              <div className="mt-4 grid grid-cols-2 gap-2 stamp text-ink-700/70">
+              <p className="mt-1 text-xs text-ink-800/80">Jeddah · Residential</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 stamp text-ink-700">
                 <span>KSA</span><span>2023</span>
               </div>
             </motion.div>
@@ -1680,14 +1685,84 @@ function BeforeAfter() {
   );
 }
 
-function ProjectsGrid() {
-  const [active, setActive] = useState('All');
-  const [openId, setOpenId] = useState(null);
+function ProjectStrip({ projects, onOpen }) {
   const [hoverIdx, setHoverIdx] = useState(0);
-  const filtered = useMemo(() => (active === 'All' ? PROJECTS : PROJECTS.filter((p) => p.category === active)), [active]);
-  const open = filtered.find((p) => p.id === openId) || PROJECTS.find((p) => p.id === openId);
+  useEffect(() => { setHoverIdx(0); }, [projects]);
+  return (
+    <>
+      {/* Expanding horizontal-strip accordion (desktop) */}
+      <div className="mt-8 hidden h-[62vh] min-h-[440px] gap-2 md:flex">
+        {projects.map((p, i) => {
+          const isHover = hoverIdx === i;
+          return (
+            <button key={p.id}
+              onMouseEnter={() => setHoverIdx(i)}
+              onClick={() => onOpen(p.id)}
+              style={{ flex: isHover ? 10 : 1 }}
+              className="group relative isolate min-w-[60px] overflow-hidden rounded-2xl border border-ink-900/8 text-left transition-[flex] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]">
+              <img src={p.img} alt={p.title}
+                className={'absolute inset-0 h-full w-full object-cover transition-transform duration-1000 ease-out ' + (isHover ? 'scale-100' : 'scale-[1.18]')} />
+              <span className={'absolute inset-0 transition-opacity duration-500 ' + (isHover ? 'bg-gradient-to-t from-ink-900/80 via-ink-900/15 to-transparent opacity-100' : 'bg-ink-900/55 opacity-100')} />
 
-  useEffect(() => { setHoverIdx(0); }, [active]);
+              {/* COLLAPSED label — vertical title down the strip */}
+              <span className={'absolute inset-0 flex items-end justify-center pb-6 transition-opacity duration-300 ' + (isHover ? 'opacity-0' : 'opacity-100')}>
+                <span className="flex flex-col items-center gap-3 text-white">
+                  <span className="stamp text-[9px] text-gold-300">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="font-display text-xl whitespace-nowrap [writing-mode:vertical-rl] [transform:rotate(180deg)]">{p.title}</span>
+                  <span className="stamp text-[9px] text-white/60">{p.year}</span>
+                </span>
+              </span>
+
+              {/* HOVERED content */}
+              <span className={'absolute inset-0 flex flex-col justify-end p-8 transition-all duration-700 ' + (isHover ? 'translate-y-0 opacity-100 delay-200' : 'translate-y-3 opacity-0')}>
+                <span className="flex items-center gap-3 stamp text-gold-300">
+                  <span>{String(i + 1).padStart(2, '0')}</span><span>·</span>
+                  <span>{p.category}</span><span>·</span>
+                  <span>{p.year}</span>
+                </span>
+                <h3 className="mt-3 font-display text-4xl leading-tight text-white md:text-6xl">{p.title}</h3>
+                <p className="mt-2 text-white/85">{p.location} · {p.size}</p>
+                <p className="mt-4 max-w-xl text-sm italic text-white/85">{p.tagline}</p>
+                <span className="mt-6 inline-flex items-center gap-2 stamp text-gold-300">OPEN PROJECT →</span>
+              </span>
+
+              <span className={'absolute inset-x-4 top-3 h-px bg-gold-400 transition-opacity duration-500 ' + (isHover ? 'opacity-100' : 'opacity-0')} />
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Mobile: swipeable row */}
+      <div className="-mx-[3vw] mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-[3vw] px-[3vw] pb-2 [scrollbar-width:none] md:hidden">
+        {projects.map((p, i) => (
+          <button key={p.id} onClick={() => onOpen(p.id)}
+            className="group relative aspect-[4/5] w-[78%] shrink-0 snap-start overflow-hidden rounded-2xl text-left">
+            <img src={p.img} alt={p.title} className="absolute inset-0 h-full w-full object-cover" />
+            <span className="absolute inset-0 bg-gradient-to-t from-ink-900/80 via-ink-900/20 to-transparent" />
+            <span className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-5 text-white">
+              <span className="stamp text-gold-300">{String(i + 1).padStart(2, '0')} · {p.year}</span>
+              <span className="font-display text-2xl">{p.title}</span>
+              <span className="text-sm text-white/75">{p.location}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ProjectsGrid() {
+  const [discipline, setDiscipline] = useState(DISCIPLINES[0].key);
+  const [openId, setOpenId] = useState(null);
+  const open = PROJECTS.find((p) => p.id === openId);
+
+  const sections = useMemo(() => SECTORS
+    .map((sector) => ({
+      sector,
+      projects: PROJECTS.filter((p) => p.category === sector && p.disciplines.includes(discipline)),
+    }))
+    .filter((s) => s.projects.length > 0), [discipline]);
+
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
@@ -1696,86 +1771,54 @@ function ProjectsGrid() {
   return (
     <section className="relative py-12">
       <div className="mx-auto w-[min(1500px,94vw)]">
-        {/* Filter pills */}
-        <div className="flex flex-wrap items-center gap-2">
-          {CATEGORIES.map((c) => (
-            <button key={c} onClick={() => setActive(c)}
-              className={'magnetic-btn relative rounded-full border px-5 py-2 text-[11px] uppercase tracking-widest-2 transition ' +
-                (active === c
-                  ? 'border-gold-400 bg-gold-400/15 text-gold-600'
-                  : 'border-ink-900/12 text-ink-800/80 hover:border-gold-400 hover:text-gold-600')}>
-              {c}
-            </button>
-          ))}
-          <span className="ml-auto stamp text-ink-700/50">
-            {String(filtered.length).padStart(2, '0')} / {String(PROJECTS.length).padStart(2, '0')} PROJECTS
-          </span>
-        </div>
-
-        {/* Expanding horizontal-strip accordion (desktop) */}
-        <div className="mt-10 hidden h-[70vh] min-h-[480px] gap-2 md:flex">
-          {filtered.map((p, i) => {
-            const isHover = hoverIdx === i;
+        {/* Discipline switch: Architecture / Interior Design */}
+        <div role="tablist" aria-label="Discipline" className="grid grid-cols-2 gap-3 md:gap-4">
+          {DISCIPLINES.map((d) => {
+            const isActive = discipline === d.key;
+            const count = PROJECTS.filter((p) => p.disciplines.includes(d.key)).length;
             return (
-              <button key={p.id}
-                onMouseEnter={() => setHoverIdx(i)}
-                onClick={() => setOpenId(p.id)}
-                style={{ flex: isHover ? 10 : 1 }}
-                className="group relative isolate min-w-[60px] overflow-hidden rounded-2xl border border-ink-900/8 text-left transition-[flex] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]">
-                {/* photo */}
-                <img src={p.img} alt={p.title}
-                  className={'absolute inset-0 h-full w-full object-cover transition-transform duration-1000 ease-out ' + (isHover ? 'scale-100' : 'scale-[1.18]')} />
-                {/* gradient */}
-                <span className={'absolute inset-0 transition-opacity duration-500 ' + (isHover ? 'bg-gradient-to-t from-ink-900/80 via-ink-900/15 to-transparent opacity-100' : 'bg-ink-900/55 opacity-100')} />
-
-                {/* COLLAPSED label — vertical title down the strip */}
-                <span className={'absolute inset-0 flex items-end justify-center pb-6 transition-opacity duration-300 ' + (isHover ? 'opacity-0' : 'opacity-100')}>
-                  <span className="flex flex-col items-center gap-3 text-white">
-                    <span className="stamp text-[9px] text-gold-300">{String(i + 1).padStart(2, '0')}</span>
-                    <span className="font-display text-xl whitespace-nowrap [writing-mode:vertical-rl] [transform:rotate(180deg)]">{p.title}</span>
-                    <span className="stamp text-[9px] text-white/60">{p.year}</span>
-                  </span>
+              <button key={d.key} role="tab" aria-selected={isActive} onClick={() => setDiscipline(d.key)}
+                className={'magnetic-btn group relative overflow-hidden rounded-2xl border p-5 text-left transition md:p-8 ' +
+                  (isActive
+                    ? 'border-gold-400 bg-gold-400/10'
+                    : 'border-ink-900/12 hover:border-gold-400/60')}>
+                <span className="hidden items-center justify-between stamp md:flex">
+                  <span className={isActive ? 'text-gold-600' : 'text-ink-700/50'}>{d.i}</span>
+                  <span className={isActive ? 'text-gold-600' : 'text-ink-700/50'}>{String(count).padStart(2, '0')} projects</span>
                 </span>
-
-                {/* HOVERED content */}
-                <span className={'absolute inset-0 flex flex-col justify-end p-8 transition-all duration-700 ' + (isHover ? 'translate-y-0 opacity-100 delay-200' : 'translate-y-3 opacity-0')}>
-                  <span className="flex items-center gap-3 stamp text-gold-300">
-                    <span>{String(i + 1).padStart(2, '0')}</span><span>·</span>
-                    <span>{p.category}</span><span>·</span>
-                    <span>{p.year}</span>
-                  </span>
-                  <h3 className="mt-3 font-display text-4xl leading-tight text-white md:text-6xl">{p.title}</h3>
-                  <p className="mt-2 text-white/85">{p.location} · {p.size}</p>
-                  <p className="mt-4 max-w-xl text-sm italic text-white/85">{p.tagline}</p>
-                  <span className="mt-6 inline-flex items-center gap-2 stamp text-gold-300">OPEN PROJECT →</span>
+                <span className={'block font-display text-2xl leading-tight md:mt-6 md:text-6xl md:leading-none ' + (isActive ? 'text-ink-900' : 'text-ink-800/60 group-hover:text-ink-900')}>
+                  {d.key}
                 </span>
-
-                {/* glow line at top when hovered */}
-                <span className={'absolute inset-x-4 top-3 h-px bg-gold-400 transition-opacity duration-500 ' + (isHover ? 'opacity-100' : 'opacity-0')} />
+                <span className="mt-3 hidden max-w-md text-sm text-ink-800/70 md:block">{d.blurb}</span>
+                <span className={'mt-3 block stamp md:hidden ' + (isActive ? 'text-gold-600' : 'text-ink-700/50')}>{count} projects</span>
+                <span className={'absolute inset-x-0 bottom-0 h-[3px] bg-gold-400 transition-transform duration-500 origin-left ' + (isActive ? 'scale-x-100' : 'scale-x-0')} />
               </button>
             );
           })}
         </div>
 
-        {/* Mobile fallback: clean stacked cards */}
-        <div className="mt-8 grid grid-cols-1 gap-4 md:hidden">
-          {filtered.map((p, i) => (
-            <button key={p.id} onClick={() => setOpenId(p.id)}
-              className="group relative aspect-[4/3] overflow-hidden rounded-2xl text-left">
-              <img src={p.img} alt={p.title} className="absolute inset-0 h-full w-full object-cover" />
-              <span className="absolute inset-0 bg-gradient-to-t from-ink-900/80 via-ink-900/20 to-transparent" />
-              <span className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-5 text-white">
-                <span className="stamp text-gold-300">{String(i + 1).padStart(2, '0')} · {p.category} · {p.year}</span>
-                <span className="font-display text-2xl">{p.title}</span>
-                <span className="text-sm text-white/75">{p.location}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {filtered.length === 0 && (
-          <p className="py-10 text-center text-ink-700/60">No projects in this category yet.</p>
-        )}
+        {/* Sector sections inside the chosen discipline */}
+        <AnimatePresence mode="wait">
+          <motion.div key={discipline}
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}>
+            {sections.map(({ sector, projects }, si) => (
+              <div key={sector} className="mt-16 md:mt-24">
+                <div className="flex items-end justify-between gap-4 border-b border-ink-900/10 pb-4">
+                  <div>
+                    <p className="stamp text-gold-600">{String(si + 1).padStart(2, '0')} — {discipline}</p>
+                    <h2 className="mt-2 font-display text-3xl leading-tight text-ink-900 md:text-5xl">{sector}</h2>
+                  </div>
+                  <span className="stamp shrink-0 text-ink-700/50">
+                    {String(projects.length).padStart(2, '0')}<span className="hidden md:inline"> projects</span>
+                    <span className="md:hidden"> · swipe →</span>
+                  </span>
+                </div>
+                <ProjectStrip projects={projects} onOpen={setOpenId} />
+              </div>
+            ))}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>
@@ -1852,7 +1895,7 @@ function ProjectsPage() {
   return (
     <>
       <PageHeader tag="— PORTFOLIO" title="Project" accent="Portfolio."
-        subtitle="Eighty-plus residential, commercial and hospitality projects across Saudi Arabia — filter by category, click a tile to step inside." />
+        subtitle="Eighty-plus projects across Saudi Arabia — choose Architecture or Interior Design, then step inside any project." />
       <ProjectsGrid />
       <BeforeAfter />
       <CTABand />
