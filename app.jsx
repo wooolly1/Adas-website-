@@ -83,8 +83,14 @@ function NavLink({ to, children, className, onClick, end = false, ...rest }) {
  * ==========================================================*/
 
 const PROJECTS = [
-  { id: 'private-palace', disciplines: ['Architecture', 'Interior Design'], title: 'Private Palace', category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Lead Architect · Interiors', tagline: 'A private palace where Hijazi tradition meets contemporary restraint.',
-    img: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80', span: 'tall' },
+  { id: 'private-palace', disciplines: ['Architecture'], title: 'Private Palace 1', category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture & Landscape', role: 'Architecture · Landscape', status: 'Design · 3D Visualisation', tagline: 'A private palace set within layered gardens, opening onto a sunlit pool court.',
+    description: [
+      'A family palace in Jeddah composed as a sequence of calm, stone-clad volumes. Deep overhangs and timber soffits shade the glazing, while the main living spaces open directly onto a generous pool court with in-water loungers and timber decks.',
+      'Landscape is treated as architecture: olive trees, palms and bougainvillea frame the entrances, and a curved garden walk leads the family from the gate to the outdoor lounges.',
+    ],
+    img: './projects/private-palace-1/01.webp',
+    gallery: Array.from({ length: 12 }, (_, i) => `./projects/private-palace-1/${String(i + 1).padStart(2, '0')}.webp`),
+    span: 'tall' },
   { id: 'lulus-recipe-obhur', disciplines: ['Interior Design'], title: "Lulu's Recipe — Obhur", category: 'Commercial & Entertainment', year: '2023', location: 'Obhur, Jeddah', size: 'Interior · Fit-out', role: 'Interior Architecture', tagline: 'A coastal flagship for a beloved family-recipe brand.',
     img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1600&q=80', span: 'wide' },
   { id: 'lulus-recipe-naeem', disciplines: ['Interior Design'], title: "Lulu's Recipe — Naeem", category: 'Commercial & Entertainment', year: '2024', location: 'Naeem, Jeddah', size: 'Interior · Fit-out', role: 'Interior Architecture', tagline: 'A second chapter for the family-recipe brand, drawn into the city.',
@@ -1829,6 +1835,19 @@ function ProjectsGrid() {
 }
 
 function ProjectModal({ project, onClose }) {
+  const images = project.gallery && project.gallery.length ? project.gallery : [project.img];
+  const [idx, setIdx] = useState(0);
+  const go = (d) => setIdx((i) => (i + d + images.length) % images.length);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (images.length > 1 && e.key === 'ArrowRight') go(1);
+      if (images.length > 1 && e.key === 'ArrowLeft') go(-1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [images.length]);
+  const hasRealCopy = !!project.description;
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-[150] grid place-items-center bg-ink-900/40 px-4 py-10 backdrop-blur-xl"
@@ -1838,8 +1857,25 @@ function ProjectModal({ project, onClose }) {
         onClick={(e) => e.stopPropagation()}
         className="glass relative max-h-[88vh] w-[min(1100px,96vw)] overflow-y-auto rounded-2xl">
         <div className="relative aspect-[16/9] overflow-hidden">
-          <PrettyImg src={project.img} alt={project.title} className="h-full w-full" />
-          <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/40 to-transparent" />
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.img key={images[idx]} src={images[idx]} alt={`${project.title} — view ${idx + 1}`}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}
+              className="absolute inset-0 h-full w-full object-cover" />
+          </AnimatePresence>
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink-950/90 via-transparent to-transparent" />
+          {images.length > 1 && (
+            <>
+              {[[-1, 'left-4', 'Previous image', '←'], [1, 'right-4', 'Next image', '→']].map(([d, pos, label, ch]) => (
+                <button key={d} onClick={() => go(d)} aria-label={label}
+                  className={'absolute top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/40 bg-ink-900/40 text-white backdrop-blur-sm transition hover:border-gold-300 hover:text-gold-300 ' + pos}>
+                  {ch}
+                </button>
+              ))}
+              <span className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-ink-900/50 px-3 py-1.5 stamp text-white/90 backdrop-blur-sm">
+                {String(idx + 1).padStart(2, '0')} / {String(images.length).padStart(2, '0')}
+              </span>
+            </>
+          )}
           <button onClick={onClose}
             className="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full border border-white/40 bg-ink-900/40 text-white transition hover:border-gold-300 hover:text-gold-300"
             aria-label="Close">
@@ -1848,15 +1884,33 @@ function ProjectModal({ project, onClose }) {
               <span className="absolute inset-x-0 top-1/2 h-px -rotate-45 bg-current" />
             </span>
           </button>
-          <div className="absolute inset-x-0 bottom-0 p-8">
+          <div className="absolute inset-x-0 bottom-0 hidden p-8 md:block">
             <p className="stamp text-gold-300">{project.category} · {project.year}</p>
             <h3 className="mt-2 font-display text-4xl leading-tight text-white md:text-6xl">{project.title}</h3>
             <p className="mt-2 text-white/80">{project.location} · {project.size}</p>
           </div>
         </div>
-        <div className="grid grid-cols-12 gap-6 p-8">
+        <div className="px-6 pt-6 md:hidden">
+          <p className="stamp text-gold-600">{project.category} · {project.year}</p>
+          <h3 className="mt-2 font-display text-4xl leading-tight text-ink-900">{project.title}</h3>
+          <p className="mt-1 text-sm text-ink-800/70">{project.location} · {project.size}</p>
+        </div>
+        {images.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto px-6 pt-6 [scrollbar-width:none] md:px-8">
+            {images.map((src, i) => (
+              <button key={src} onClick={() => setIdx(i)} aria-label={`Show image ${i + 1}`}
+                className={'relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border-2 transition ' + (i === idx ? 'border-gold-400' : 'border-transparent opacity-60 hover:opacity-100')}>
+                <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="grid grid-cols-12 gap-6 p-6 md:p-8">
           <div className="col-span-12 md:col-span-7">
-            <p className="text-lg italic text-gold-300">{project.tagline}</p>
+            <p className="text-lg italic text-gold-600">{project.tagline}</p>
+            {hasRealCopy ? project.description.map((para, i) => (
+              <p key={i} className="mt-5 text-ink-800/75">{para}</p>
+            )) : (<>
             <p className="mt-5 text-ink-800/75">
               {project.title} was developed across an eighteen-month design phase and twenty-six
               months of construction. The project was led from our {project.location.split(',')[0]} desk,
@@ -1868,11 +1922,13 @@ function ProjectModal({ project, onClose }) {
               binds the elevation, the section and the plan. Inside, light is treated as a primary
               material; outside, the building keeps a quiet conversation with its city.
             </p>
+            </>)}
           </div>
           <div className="col-span-12 md:col-span-5">
             <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-              {[['Role', project.role], ['Location', project.location], ['Size', project.size],
-                ['Year', project.year], ['Status', 'Built'], ['Award', 'Domus 100, 2024']
+              {[['Role', project.role], ['Location', project.location], ['Scope', project.size],
+                ['Year', project.year], ['Status', project.status || 'Built'],
+                ...(hasRealCopy ? (project.award ? [['Award', project.award]] : []) : [['Award', 'Domus 100, 2024']]),
               ].map(([k, v]) => (
                 <div key={k}>
                   <p className="stamp text-ink-700/50">{k}</p>
@@ -1880,10 +1936,10 @@ function ProjectModal({ project, onClose }) {
                 </div>
               ))}
             </div>
-            <div className="mt-8 border-t border-ink-900/10 pt-6">
+            {(!hasRealCopy || project.press) && <div className="mt-8 border-t border-ink-900/10 pt-6">
               <p className="stamp text-ink-700/50">Press</p>
-              <p className="mt-2 text-ink-800/80">Featured in Dezeen, Domus, Wallpaper* and Frame magazine.</p>
-            </div>
+              <p className="mt-2 text-ink-800/80">{project.press || 'Featured in Dezeen, Domus, Wallpaper* and Frame magazine.'}</p>
+            </div>}
           </div>
         </div>
       </motion.div>
