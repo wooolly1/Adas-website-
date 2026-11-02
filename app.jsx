@@ -101,7 +101,7 @@ const PROJECTS = [
     img: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
   { id: 'private-house', disciplines: ['Architecture', 'Interior Design'], title: 'House 1', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Interior', role: 'Architecture · Interiors', tagline: 'A family house composed around a quiet inner courtyard.',
     img: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=80', span: 'tall' },
-  { id: 'private-villa', disciplines: ['Architecture'], title: 'Villa 1', category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A contemporary family villa that reinterprets the Hijazi façade.',
+  { id: 'private-villa', disciplines: ['Architecture'], title: 'Villa 1', category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A contemporary family villa that reinterprets the Hijazi façade.',
     description: [
       'A family villa composed of stepped, lime-white volumes that give the street a calm, layered façade. Timber mashrabiya screens and stone-clad towers mark the principal rooms, filtering the sun while keeping the interiors private.',
       'Perforated masonry panels, recessed windows and a low garden wall soften the edge between home and street, with covered parking tucked discreetly into the base.',
