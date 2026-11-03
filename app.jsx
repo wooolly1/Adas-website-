@@ -3280,7 +3280,7 @@ function BookPage() {
  *  Setup: docs/attendance-setup.md. Fill in the two IDs below.
  * ==========================================================*/
 
-const MS_CLIENT_ID = '';   // Application (client) ID
+const MS_CLIENT_ID = 'adbb71da-fe2d-4489-8275-331bb4500b81';   // Application (client) ID
 const MS_TENANT_ID = '08d435b8-9026-497b-9491-1c4532c20d3f';   // Directory (tenant) ID
 const ATTENDANCE_API = '/api/attendance';
 const MS_SCOPES = ['openid', 'profile', 'email'];
