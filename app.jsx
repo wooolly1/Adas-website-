@@ -554,14 +554,15 @@ function useTransparentLogo(srcPath = './logo.jpg', threshold = 235) {
   return pair;
 }
 
-function Logo({ className = '', dark: darkProp = false }) {
+/* wordmark: 'sm' (from 640px), 'wide' (from 1360px, header), 'none' */
+function Logo({ className = '', dark: darkProp = false, wordmark = 'sm', compact = false }) {
   const pair = useTransparentLogo();
   const { theme } = useTheme();
   const dark = darkProp && theme !== 'dark'; // dark strokes only on light backgrounds
   // Fallback: use raw jpg until processed
   const src = pair ? (dark ? pair.dark : pair.light) : './logo.jpg';
   return (
-    <Link to="/" className={'group flex items-center gap-3 ' + className}>
+    <Link to="/" aria-label="ADAS Architecture — home" className={'group flex items-center ' + className}>
       <img
         src={src}
         alt="ADAS"
@@ -569,10 +570,14 @@ function Logo({ className = '', dark: darkProp = false }) {
         className="h-11 w-auto select-none transition-transform duration-500 group-hover:scale-[1.03]"
         style={{ background: 'transparent' }}
       />
-      <span className="hidden flex-col gap-[2px] leading-none sm:flex">
+      {wordmark !== 'none' && (
+      <span aria-hidden={compact} className={'hidden flex-col justify-center gap-[2px] overflow-hidden whitespace-nowrap leading-none transition-all duration-500 ease-out '
+        + (wordmark === 'wide' ? 'min-[1360px]:flex ' : 'sm:flex ')
+        + (compact ? 'ml-0 max-w-0 opacity-0' : 'ml-3 max-w-[220px] opacity-100')}>
         <span className="stamp text-[8px] tracking-[0.28em]">ADAS Architecture</span>
         <span className="stamp text-[7px] tracking-[0.22em] text-lilac-500/80">Jeddah · KSA</span>
       </span>
+      )}
     </Link>
   );
 }
@@ -666,16 +671,16 @@ function Navbar({ onOpenMenu }) {
       {/* soft fade in the page colour so scrolling content doesn't collide with the floating pills */}
       <div aria-hidden="true" className={'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[150%] transition-opacity duration-500 ' + (scrolled ? 'opacity-100' : 'opacity-0')} />
       <div className="mx-auto flex w-[min(1500px,94vw)] items-center justify-between">
-        <div ref={logoRef} className={'flex items-center gap-4 rounded-full px-4 py-2 transition-all duration-500 ' +
+        <div ref={logoRef} className={'flex items-center rounded-full py-2 transition-all duration-500 ' + (scrolled ? 'px-3 ' : 'px-3 min-[1360px]:px-4 ') +
           (scrolled ? 'glass shadow-soft ' : 'bg-transparent ') + (onDark ? 'text-white' : 'text-ink-900')}>
-          <Logo dark={!onDark} />
+          <Logo dark={!onDark} wordmark="wide" compact={scrolled} />
         </div>
-        <nav className={'hidden items-center gap-1 rounded-full px-2 py-1.5 transition-all duration-500 md:flex ' +
+        <nav className={'hidden items-center gap-1 rounded-full px-2 py-1.5 transition-all duration-500 lg:flex ' +
           (scrolled ? 'glass shadow-soft' : 'bg-transparent')}>
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === '/'}
               className={({ isActive }) =>
-                'nav-link relative px-5 py-2 text-[12px] uppercase tracking-widest-2 ' +
+                'nav-link relative px-3 py-2 text-[12px] uppercase tracking-widest-2 xl:px-5 ' +
                 (isActive ? 'active text-gold-300' : overHero ? 'text-white/85 hover:text-white' : 'text-ink-800/80 hover:text-ink-900')
               }>
               <span className={'mr-2 font-mono text-[10px] ' + (overHero ? 'text-white/50' : 'text-ink-700/50')}>{n.i}</span>
@@ -685,12 +690,12 @@ function Navbar({ onOpenMenu }) {
         </nav>
         <div className="flex items-center gap-3">
           <Link to="/contact"
-            className="magnetic-btn hidden rounded-full border border-gold-400/40 px-5 py-2 text-[11px] font-medium uppercase tracking-widest-2 text-gold-300 transition hover:bg-gold-400/10 md:inline-flex">
+            className="magnetic-btn hidden rounded-full border border-gold-400/40 px-5 py-2 text-[11px] font-medium uppercase tracking-widest-2 text-gold-300 transition hover:bg-gold-400/10 whitespace-nowrap lg:inline-flex">
             Start a Project
           </Link>
           <ThemeToggle />
           <button aria-label="Menu" onClick={onOpenMenu}
-            className={'glass grid h-10 w-10 place-items-center rounded-full md:hidden ' + (onDark ? 'text-white' : 'text-ink-900')}>
+            className={'glass grid h-10 w-10 place-items-center rounded-full lg:hidden ' + (onDark ? 'text-white' : 'text-ink-900')}>
             <span className="flex flex-col gap-1">
               <span className="block h-px w-4 bg-current" />
               <span className="block h-px w-4 bg-current" />
@@ -707,10 +712,10 @@ function MobileMenu({ open, onClose }) {
     <AnimatePresence>
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[120] bg-white/90 backdrop-blur-xl md:hidden">
+          className="fixed inset-0 z-[120] bg-white/90 backdrop-blur-xl lg:hidden">
           <div className="flex h-full flex-col px-8 py-10">
             <div className="flex items-center justify-between">
-              <Logo dark />
+              <Logo dark wordmark="none" />
               <button onClick={onClose} aria-label="Close"
                 className="grid h-10 w-10 place-items-center rounded-full border border-ink-900/15 text-ink-900">
                 <span className="relative block h-4 w-4">
