@@ -304,8 +304,7 @@ const TEAM = [
 const DESIGN_TEAM = [
   { name: 'Wijdan Ashqar', role: 'Interior Designer', gender: 'f' },
   { name: 'Amani Al Hameed', role: 'Interior Designer', gender: 'f' },
-  { name: 'Renad Al Gain', role: 'Architect', gender: 'f' },
-  { name: 'Randy Razon', role: 'Draftsman', gender: 'm' },
+  { name: 'Tamem Saeedi', role: 'Architect', gender: 'm' },
   { name: 'E H', role: 'Structural Engineering Lead', gender: 'm' },
   { name: 'M Q', role: 'Electrical Engineering Lead', gender: 'm' },
 ];
@@ -1660,7 +1659,7 @@ function TeamSection() {
               The people <span className="font-titling not-italic font-medium text-gold-500">at the drawing boards</span>.
             </h3>
           </Reveal>
-          <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {DESIGN_TEAM.map((m, i) => (
               <Reveal key={m.name} delay={(i % 6) * 0.06}>
                 <div className="group flex h-full flex-col items-center rounded-2xl border border-ink-900/10 bg-white p-5 text-center transition hover:border-gold-400/50 hover:shadow-soft">
