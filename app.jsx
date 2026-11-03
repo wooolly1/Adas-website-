@@ -3281,7 +3281,7 @@ function BookPage() {
  * ==========================================================*/
 
 const MS_CLIENT_ID = '';   // Application (client) ID
-const MS_TENANT_ID = '';   // Directory (tenant) ID
+const MS_TENANT_ID = '08d435b8-9026-497b-9491-1c4532c20d3f';   // Directory (tenant) ID
 const ATTENDANCE_API = '/api/attendance';
 const MS_SCOPES = ['openid', 'profile', 'email'];
 const attConfigured = () => !!(MS_CLIENT_ID && MS_TENANT_ID);
