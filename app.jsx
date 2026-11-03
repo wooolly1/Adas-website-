@@ -3385,6 +3385,174 @@ function MicrosoftMark() {
   );
 }
 
+/* Working days (Sun–Thu) between two YYYY-MM-DD dates, inclusive — mirrors the API */
+function leaveDays(start, end) {
+  if (!start || !end || end < start) return 0;
+  let n = 0;
+  for (let d = new Date(start + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const w = d.getUTCDay(); if (w !== 5 && w !== 6) n++;
+  }
+  return n;
+}
+const fmtLeaveDate = (iso) => (iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
+const LEAVE_TONE = {
+  Pending: 'bg-lilac-400/20 text-lilac-600', Approved: 'bg-gold-400/20 text-gold-700',
+  Rejected: 'bg-red-500/10 text-red-700', Cancelled: 'bg-ink-900/5 text-ink-700/60',
+};
+
+function AnnualLeave() {
+  const [data, setData] = useState(null);
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState(null);
+  const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
+
+  const run = async (label, body, okText) => {
+    setBusy(label); setMsg(null);
+    try {
+      const r = await attCall(body.action, body);
+      if (!r.ok) throw new Error(r.error === 'signed_out' ? 'Your session expired. Please sign in again.' : r.error);
+      setData(r);
+      if (okText) setMsg({ type: 'ok', text: okText });
+      return true;
+    } catch (e) { setMsg({ type: 'error', text: e.message || 'Connection problem. Please try again.' }); return false; }
+    finally { setBusy(''); }
+  };
+
+  useEffect(() => { run('load', { action: 'leaveStatus' }); }, []);
+
+  const days = leaveDays(start, end);
+  const bal = data && data.balance;
+  const submit = async (e) => {
+    e.preventDefault();
+    const ok = await run('request', { action: 'leaveRequest', start, end, note }, 'Request sent to your manager.');
+    if (ok) { setStart(''); setEnd(''); setNote(''); }
+  };
+  const inputCls = 'mt-2 w-full rounded-none border-0 border-b border-ink-900/12 bg-transparent px-0 py-3 text-ink-900 outline-none focus:border-gold-400 focus:ring-0 [color-scheme:light] dark:[color-scheme:dark]';
+  const btn = 'magnetic-btn inline-flex items-center justify-center rounded-full px-5 py-3 text-[11px] uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-40';
+
+  return (
+    <div className="glass mt-6 rounded-3xl p-6 shadow-soft md:p-10">
+      <p className="stamp text-gold-600">Annual leave {bal ? bal.year : ''}</p>
+
+      {!data && !msg && <p className="mt-4 stamp text-ink-700/60">Loading…</p>}
+
+      {bal && (
+        <>
+          <div className="mt-4 flex items-end gap-3">
+            <span className="font-display text-6xl leading-none text-ink-900">{bal.remaining}</span>
+            <span className="pb-1 text-sm text-ink-800/70">of {bal.allowance} days left</span>
+          </div>
+          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-ink-900/10" aria-hidden="true">
+            <div className="flex h-full">
+              <span className="bg-gold-500" style={{ width: `${(bal.used / bal.allowance) * 100}%` }} />
+              <span className="bg-lilac-400" style={{ width: `${(bal.pending / bal.allowance) * 100}%` }} />
+            </div>
+          </div>
+          <div className="mt-2 flex gap-5 text-xs text-ink-800/70">
+            <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-gold-500" />Taken {bal.used}</span>
+            <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-lilac-400" />Pending {bal.pending}</span>
+          </div>
+
+          <form onSubmit={submit} className="mt-8 space-y-5 border-t border-ink-900/10 pt-6">
+            <p className="font-display text-2xl text-ink-900">Request leave</p>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="block"><span className="stamp text-ink-700/60">From</span>
+                <input type="date" required min={todayIso} value={start}
+                  onChange={(e) => { setStart(e.target.value); if (!end || end < e.target.value) setEnd(e.target.value); }} className={inputCls} />
+              </label>
+              <label className="block"><span className="stamp text-ink-700/60">To</span>
+                <input type="date" required min={start || todayIso} value={end} onChange={(e) => setEnd(e.target.value)} className={inputCls} />
+              </label>
+            </div>
+            <label className="block"><span className="stamp text-ink-700/60">Note (optional)</span>
+              <input type="text" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. family travel" className={inputCls + ' placeholder:text-ink-700/40'} />
+            </label>
+            {start && end && (
+              <p className={'text-sm ' + (days > bal.remaining ? 'text-red-700' : 'text-ink-800/80')}>
+                {days === 0 ? 'No working days in these dates (Fri & Sat don\'t count).'
+                  : `${days} working day${days === 1 ? '' : 's'} · ${Math.max(0, bal.remaining - days)} would remain`}
+                {days > bal.remaining && ` — more than your ${bal.remaining} days left.`}
+              </p>
+            )}
+            <button type="submit" disabled={!!busy || !days || days > bal.remaining} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+              {busy === 'request' ? 'Sending…' : 'Send to manager'}
+            </button>
+          </form>
+
+          {data.requests.length > 0 && (
+            <div className="mt-8 border-t border-ink-900/10 pt-6">
+              <p className="stamp text-ink-700/60">My requests</p>
+              <ul className="mt-3 divide-y divide-ink-900/10">
+                {data.requests.map((l) => (
+                  <li key={l.id} className="flex items-center justify-between gap-3 py-3">
+                    <div>
+                      <p className="text-ink-900">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} <span className="text-ink-800/60">· {l.days}d</span></p>
+                      {l.note && <p className="text-xs text-ink-800/60">{l.note}</p>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className={'rounded-full px-2.5 py-1 text-[11px] ' + (LEAVE_TONE[l.status] || LEAVE_TONE.Cancelled)}>{l.status}</span>
+                      {l.status === 'Pending' && (
+                        <button onClick={() => run('cancel-' + l.id, { action: 'leaveCancel', id: l.id }, 'Request cancelled.')} disabled={!!busy}
+                          className="stamp text-ink-700/60 hover:text-red-700">Cancel</button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {data.manager && (
+            <div className="mt-8 border-t border-ink-900/10 pt-6">
+              <p className="font-display text-2xl text-ink-900">Approvals</p>
+              {data.pending.length === 0 ? <p className="mt-2 text-sm text-ink-800/70">No requests waiting.</p> : (
+                <ul className="mt-3 space-y-3">
+                  {data.pending.map((l) => (
+                    <li key={l.id} className="rounded-2xl border border-ink-900/10 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-ink-900">{l.name}</p>
+                          <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {l.days} day{l.days === 1 ? '' : 's'}</p>
+                          {l.note && <p className="mt-1 text-xs text-ink-800/60">“{l.note}”</p>}
+                        </div>
+                        {l.remaining != null && <span className="shrink-0 text-xs text-ink-800/60">{l.remaining} days left</span>}
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button onClick={() => run('d-' + l.id, { action: 'leaveDecide', id: l.id, decision: 'approve' }, `Approved ${l.name}'s leave.`)} disabled={!!busy}
+                          className={btn + ' bg-gold-400 text-ink-950 hover:bg-gold-300'}>Approve</button>
+                        <button onClick={() => run('d-' + l.id, { action: 'leaveDecide', id: l.id, decision: 'reject' }, `Declined ${l.name}'s request.`)} disabled={!!busy}
+                          className={btn + ' border border-ink-900/15 text-ink-900 hover:border-red-500 hover:text-red-700'}>Decline</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {data.team && data.team.length > 0 && (
+                <details className="mt-5">
+                  <summary className="cursor-pointer stamp text-ink-700/60 hover:text-gold-600">Team balances</summary>
+                  <ul className="mt-3 divide-y divide-ink-900/10 text-sm">
+                    {data.team.map((t) => (
+                      <li key={t.email} className="flex justify-between py-2"><span className="text-ink-900">{t.name}</span>
+                        <span className="text-ink-800/70">{t.remaining} left · {t.used} taken{t.pending ? ` · ${t.pending} pending` : ''}</span></li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {msg && (
+        <p role="status" className={'mt-6 rounded-xl p-4 text-sm ' + (msg.type === 'error' ? 'bg-red-500/10 text-red-700' : 'bg-gold-400/10 text-ink-800')}>{msg.text}</p>
+      )}
+    </div>
+  );
+}
+
 function TeamPage() {
   const [step, setStep] = useState('loading'); // loading | signin | home
   const [me, setMe] = useState(null);           // { name, email, today }
@@ -3444,7 +3612,7 @@ function TeamPage() {
   return (
     <>
       <PageHeader tag="— TEAM" title="Team" accent="Attendance."
-        subtitle="Sign in with your Microsoft office account, then check in and out from the office." />
+        subtitle="Sign in with your Microsoft office account to check in and out, and to request annual leave." />
       <section className="relative pb-28">
         <div className="mx-auto w-[min(560px,92vw)]">
           <div className="glass rounded-3xl p-6 shadow-soft md:p-10">
@@ -3510,6 +3678,7 @@ function TeamPage() {
               </p>
             )}
           </div>
+          {step === 'home' && me && <AnnualLeave />}
           <p className="mt-6 text-center text-xs leading-relaxed text-ink-700/60">
             Your location is read only when you press Check in or Check out, to confirm you are at the office.
             It is saved with your attendance record and used for nothing else.
