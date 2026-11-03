@@ -232,6 +232,14 @@ const PROJECTS = [
     img: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=1600&q=80', span: 'tall' },
   { id: 'knowledge-city', disciplines: ['Architecture'], title: 'Knowledge City Business Park', category: 'Hospitality & Admin', year: '2024', location: 'Riyadh, KSA', size: 'Mixed-use Masterplan', role: 'Architecture · Planning', tagline: 'A campus of working buildings stitched around a green spine.',
     img: 'https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1600&q=80', span: 'wide' },
+  { id: 'verve', disciplines: ['Architecture'], title: 'Verve', category: 'Hospitality & Admin', year: '', location: 'Jeddah, KSA', size: 'Office Building', role: 'Architecture · Façade', status: 'Design · 3D Visualisation', tagline: 'A sleek glass headquarters for a workspace brand.',
+    description: [
+      'A two-storey office building for Verve, a workspace solutions provider. The façade wraps the corner in a gentle curve of glass held by slim dark mullions, giving the building a single, continuous presence along the street.',
+      'A deep fascia band carries bilingual signage above a softly patterned upper storey, while the glazed ground floor opens onto a generous forecourt with visitor parking.',
+    ],
+    img: './projects/verve/01.webp',
+    gallery: Array.from({ length: 4 }, (_, i) => `./projects/verve/${String(i + 1).padStart(2, '0')}.webp`),
+    span: 'normal' },
   { id: 'retail-park', disciplines: ['Architecture', 'Interior Design'], title: 'Retail Park', category: 'Hospitality & Admin', year: '2024', location: 'Jeddah, KSA', size: 'Mixed-use Retail', role: 'Architecture · Interiors', tagline: 'An open-air retail park designed as a public, walkable courtyard.',
     img: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=1600&q=80', span: 'normal' },
   { id: 'makkiyon-sales-office', disciplines: ['Interior Design'], title: 'Makkiyon Sales Office', category: 'Hospitality & Admin', year: '2024', location: 'Jeddah, KSA', size: 'Sales Office Interior', role: 'Interior · Workplace', tagline: 'A residential sales gallery that tells the story of the homes it sells.',
@@ -1884,8 +1892,8 @@ function ProjectStrip({ projects, onOpen }) {
               <span className={'absolute inset-0 flex flex-col justify-end p-8 transition-all duration-700 ' + (isHover ? 'translate-y-0 opacity-100 delay-200' : 'translate-y-3 opacity-0')}>
                 <span className="flex items-center gap-3 stamp text-gold-300">
                   <span>{String(i + 1).padStart(2, '0')}</span><span>·</span>
-                  <span>{p.category}</span><span>·</span>
-                  <span>{p.year}</span>
+                  <span>{p.category}</span>
+                  {p.year && <><span>·</span><span>{p.year}</span></>}
                 </span>
                 <h3 className="mt-3 font-display text-4xl leading-tight text-white md:text-6xl">{p.title}</h3>
                 <p className="mt-2 text-white/85">{p.location} · {p.size}</p>
@@ -1907,7 +1915,7 @@ function ProjectStrip({ projects, onOpen }) {
             <img src={p.img} alt={p.title} className="absolute inset-0 h-full w-full object-cover" />
             <span className="absolute inset-0 bg-gradient-to-t from-ink-900/80 via-ink-900/20 to-transparent" />
             <span className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-5 text-white">
-              <span className="stamp text-gold-300">{String(i + 1).padStart(2, '0')} · {p.year}</span>
+              <span className="stamp text-gold-300">{String(i + 1).padStart(2, '0')}{p.year && ` · ${p.year}`}</span>
               <span className="font-display text-2xl">{p.title}</span>
               <span className="text-sm text-white/75">{p.location}</span>
             </span>
@@ -2052,13 +2060,13 @@ function ProjectModal({ project, onClose }) {
             </span>
           </button>
           <div className="absolute inset-x-0 bottom-0 hidden p-8 md:block">
-            <p className="stamp text-gold-300">{project.category} · {project.year}</p>
+            <p className="stamp text-gold-300">{project.category}{project.year && ` · ${project.year}`}</p>
             <h3 className="mt-2 font-display text-4xl leading-tight text-white md:text-6xl">{project.title}</h3>
             <p className="mt-2 text-white/80">{project.location} · {project.size}</p>
           </div>
         </div>
         <div className="px-6 pt-6 md:hidden">
-          <p className="stamp text-gold-600">{project.category} · {project.year}</p>
+          <p className="stamp text-gold-600">{project.category}{project.year && ` · ${project.year}`}</p>
           <h3 className="mt-2 font-display text-4xl leading-tight text-ink-900">{project.title}</h3>
           <p className="mt-1 text-sm text-ink-800/70">{project.location} · {project.size}</p>
         </div>
@@ -2094,7 +2102,7 @@ function ProjectModal({ project, onClose }) {
           <div className="col-span-12 md:col-span-5">
             <div className="grid grid-cols-2 gap-x-6 gap-y-5">
               {[['Role', project.role], ['Location', project.location], ['Scope', project.size],
-                ['Year', project.year], ['Status', project.status || 'Built'],
+                ...(project.year ? [['Year', project.year]] : []), ['Status', project.status || 'Built'],
                 ...(hasRealCopy ? (project.award ? [['Award', project.award]] : []) : [['Award', 'Domus 100, 2024']]),
               ].map(([k, v]) => (
                 <div key={k}>
