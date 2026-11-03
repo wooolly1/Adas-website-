@@ -749,6 +749,12 @@ function MobileMenu({ open, onClose }) {
   );
 }
 
+/* Office contact links (Contact page, footer) */
+const CONTACT = {
+  whatsapp: 'https://wa.me/966558593937?text=' + encodeURIComponent('Hello ADAS, I would like to ask about a project.'),
+  maps: 'https://www.google.com/maps/search/?api=1&query=21.723028%2C39.134389',
+};
+
 /* Footer social links (simple-icons glyphs, 24×24) */
 const SOCIALS = [
   { label: 'Instagram', href: 'https://www.instagram.com/adasarchitect',
@@ -2354,16 +2360,25 @@ function ContactPage() {
           <div className="col-span-12 space-y-5 lg:col-span-5">
             <div className="glass rounded-2xl p-8">
               <p className="stamp text-gold-300">— WRITE TO US</p>
-              <p className="mt-4 font-display text-3xl leading-tight">office@adas.com.sa</p>
-              <p className="mt-1 stamp text-ink-700/50">NEW PROJECTS · PRESS · GENERAL</p>
-              <div className="mt-6 border-t border-ink-900/10 pt-6">
-                <p className="font-display text-2xl">+966 55 859 3937</p>
-                <p className="mt-1 stamp text-ink-700/50">WHATSAPP · 09 — 17 GMT+3</p>
-              </div>
-              <div className="mt-6 border-t border-ink-900/10 pt-6">
-                <p className="font-display text-2xl">Jada 30, Al-Madinah Rd</p>
-                <p className="mt-1 text-ink-800/70">Obhor Al-Janobiya, Jeddah</p>
-              </div>
+              <a href="mailto:office@adas.com.sa?subject=Project%20enquiry" className="group mt-4 block">
+                <span className="flex items-center justify-between gap-3 font-display text-3xl leading-tight transition group-hover:text-gold-600">
+                  office@adas.com.sa<span className="text-lg text-gold-600 transition group-hover:translate-x-1" aria-hidden="true">→</span>
+                </span>
+                <span className="mt-1 block stamp text-ink-700/50">PROJECTS · PRESS · TAP TO EMAIL</span>
+              </a>
+              <a href={CONTACT.whatsapp} target="_blank" rel="noopener noreferrer" className="group mt-6 block border-t border-ink-900/10 pt-6">
+                <span className="flex items-center justify-between gap-3 font-display text-2xl transition group-hover:text-gold-600">
+                  +966 55 859 3937<span className="text-lg text-gold-600 transition group-hover:translate-x-1" aria-hidden="true">→</span>
+                </span>
+                <span className="mt-1 block stamp text-ink-700/50">WHATSAPP · 09 — 17 GMT+3 · TAP TO CHAT</span>
+              </a>
+              <a href={CONTACT.maps} target="_blank" rel="noopener noreferrer" className="group mt-6 block border-t border-ink-900/10 pt-6">
+                <span className="flex items-center justify-between gap-3 font-display text-2xl transition group-hover:text-gold-600">
+                  Jada 30, Al-Madinah Rd<span className="text-lg text-gold-600 transition group-hover:translate-x-1" aria-hidden="true">→</span>
+                </span>
+                <span className="mt-1 block text-ink-800/70">Obhor Al-Janobiya, Jeddah</span>
+                <span className="mt-1 block stamp text-ink-700/50">TAP TO OPEN IN MAPS</span>
+              </a>
             </div>
             <div className="glass rounded-2xl p-8">
               <p className="stamp text-gold-300">— FOLLOW US</p>
@@ -2373,7 +2388,7 @@ function ContactPage() {
                   { l: 'LinkedIn', h: '/adas-gabson' }, { l: 'Snapchat', h: '@adasgarchitect' },
                   { l: 'X', h: '@Adasarchitect' }, { l: 'Maps', h: 'View on Google' },
                 ].map((s) => (
-                  <a href="#" onClick={(e) => e.preventDefault()} key={s.l}
+                  <a href={s.l === 'Maps' ? CONTACT.maps : (SOCIALS.find((x) => x.label === s.l) || {}).href} target="_blank" rel="noopener noreferrer" key={s.l}
                     className="group flex flex-col items-start rounded-xl border border-ink-900/10 p-3 transition hover:border-gold-300">
                     <span className="stamp text-ink-700/50 group-hover:text-gold-300">{s.l}</span>
                     <span className="mt-1 text-sm text-ink-900">{s.h}</span>
