@@ -3299,6 +3299,8 @@ async function msal() {
     cache: { cacheLocation: 'localStorage' },
   });
   await app.initialize();
+  // clears a sign-in that was started but not finished (e.g. user pressed Back)
+  await app.handleRedirectPromise().catch(() => null);
   _msal = app;
   return app;
 }
@@ -3368,7 +3370,11 @@ function TeamPage() {
 
   useEffect(() => {
     if (!attConfigured()) { setStep('signin'); return; }
-    loadStatus().catch(() => setStep('signin'));
+    let returnedError = '';
+    try { returnedError = sessionStorage.getItem('adas_att_error') || ''; sessionStorage.removeItem('adas_att_error'); } catch (e) { /* ignore */ }
+    loadStatus()
+      .then(() => { if (returnedError) setMsg({ type: 'error', text: 'Microsoft sign-in did not finish. Please try again. (' + returnedError.split('\n')[0].slice(0, 140) + ')' }); })
+      .catch(() => setStep('signin'));
   }, []);
 
   const run = async (label, fn) => {
@@ -3378,18 +3384,11 @@ function TeamPage() {
     finally { setBusy(''); }
   };
 
+  /* Full-page redirect (more reliable than pop-ups on phones). Microsoft
+   * returns to /auth-popup.html, which stores the session and comes back here. */
   const signIn = () => run('signin', async () => {
     const app = await msal();
-    try {
-      const r = await app.loginPopup({ scopes: MS_SCOPES, prompt: 'select_account' });
-      app.setActiveAccount(r.account);
-    } catch (e) {
-      if (/user_cancelled|popup_window_error/i.test(String(e && (e.errorCode || e.message)))) {
-        throw new Error('Sign-in was cancelled or the pop-up was blocked. Allow pop-ups for this site and try again.');
-      }
-      throw new Error('Microsoft sign-in failed. Please try again.');
-    }
-    await loadStatus();
+    await app.loginRedirect({ scopes: MS_SCOPES, prompt: 'select_account' });
   });
 
   const punch = (action) => run(action, async () => {
