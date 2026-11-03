@@ -131,13 +131,26 @@ const PROJECTS = [
     img: './projects/villa-3/01.webp',
     gallery: ['./projects/villa-3/01.webp', './projects/villa-3/02.webp'],
     span: 'normal' },
-  { id: 'villa-4', disciplines: ['Architecture'], title: "Assim's Villa", category: 'Residential', year: '2025', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'Warm stone, dark frames and a quiet, lantern-lit entrance.',
+  { id: 'villa-4', disciplines: ['Architecture', 'Interior Design'], title: "Assim's Villa", category: 'Residential', year: '2025', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'Warm stone, dark frames and a quiet, lantern-lit entrance.',
     description: [
       'A contemporary family villa built from warm stone volumes and deep, dark-framed openings, topped by a glazed roof pavilion that opens onto the terrace.',
       'The approach is choreographed as a sequence: floating lit steps lead to a tall pivot door beside a textured feature wall, while the boundary wall alternates timber fins, planted green strips and a softly backlit stone panel.',
     ],
     img: './projects/villa-4/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-4/${String(i + 1).padStart(2, '0')}.webp`),
+    /* same villa, shown with its interior renders under the Interior Design tab */
+    views: {
+      'Interior Design': {
+        size: 'Interior Design', role: 'Interior Design',
+        tagline: 'Warm walnut, soft stone and light that lives inside the joinery.',
+        description: [
+          'The interiors carry the villa’s warm, quiet palette inside: taupe stone, walnut joinery and soft cream upholstery. A double-height living hall is lit by cascading crystal pendants and divided by slim black-framed glass partitions.',
+          'Backlit shelving runs through the family lounge, dining room and master suite, a walk-in dressing room is lined in glass-fronted wardrobes, and an inner courtyard gathers the family around a shimmering water wall.',
+        ],
+        img: './projects/villa-4/interior/01.webp',
+        gallery: Array.from({ length: 10 }, (_, i) => `./projects/villa-4/interior/${String(i + 1).padStart(2, '0')}.webp`),
+      },
+    },
     span: 'normal' },
   { id: 'villa-5', disciplines: ['Architecture'], title: "Khalid's Villa", category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A modern villa that turns inward to a light-filled pool court.',
     description: [
@@ -165,6 +178,8 @@ const PROJECTS = [
 
 const CATEGORIES = ['All', 'Residential', 'Commercial & Entertainment', 'Hospitality & Admin'];
 const SECTORS = CATEGORIES.slice(1);
+/* a project can override its photos/copy per discipline tab via `views` */
+const viewFor = (p, discipline) => (p && p.views && p.views[discipline] ? { ...p, ...p.views[discipline] } : p);
 const DISCIPLINES = [
   { key: 'Architecture', i: '01', blurb: 'Buildings, masterplans and the shells that hold a life.' },
   { key: 'Interior Design', i: '02', blurb: 'Rooms, fit-outs and the details you touch every day.' },
@@ -1800,12 +1815,12 @@ function ProjectStrip({ projects, onOpen }) {
 function ProjectsGrid() {
   const [discipline, setDiscipline] = useState(DISCIPLINES[0].key);
   const [openId, setOpenId] = useState(null);
-  const open = PROJECTS.find((p) => p.id === openId);
+  const open = viewFor(PROJECTS.find((p) => p.id === openId), discipline);
 
   const sections = useMemo(() => SECTORS
     .map((sector) => ({
       sector,
-      projects: PROJECTS.filter((p) => p.category === sector && p.disciplines.includes(discipline)),
+      projects: PROJECTS.filter((p) => p.category === sector && p.disciplines.includes(discipline)).map((p) => viewFor(p, discipline)),
     }))
     .filter((s) => s.projects.length > 0), [discipline]);
 
@@ -1857,7 +1872,7 @@ function ProjectsGrid() {
                   </div>
                   <span className="stamp shrink-0 text-ink-700/50">
                     {String(projects.length).padStart(2, '0')}<span className="hidden md:inline"> projects</span>
-                    <span className="md:hidden"> · swipe →</span>
+                    {projects.length > 1 && <span className="md:hidden"> · swipe →</span>}
                   </span>
                 </div>
                 <ProjectStrip projects={projects} onOpen={setOpenId} />
