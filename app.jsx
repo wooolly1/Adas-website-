@@ -2398,8 +2398,7 @@ function ContactPage() {
               <p className="stamp text-gold-300">— OPENING HOURS</p>
               <div className="mt-4 space-y-2 text-ink-800/80">
                 <div className="flex justify-between"><span>Sun — Thu</span><span className="stamp text-ink-700/70">09:00 — 18:00</span></div>
-                <div className="flex justify-between"><span>Fri</span><span className="stamp text-ink-700/70">10:00 — 14:00</span></div>
-                <div className="flex justify-between"><span>Sat</span><span className="stamp text-ink-700/70">CLOSED</span></div>
+                <div className="flex justify-between"><span>Fri — Sat</span><span className="stamp text-ink-700/70">CLOSED</span></div>
               </div>
             </div>
           </div>
