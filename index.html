@@ -105,7 +105,8 @@
         --cursor-x: 50vw;
         --cursor-y: 50vh;
       }
-      html, body, #root { height: 100%; }
+      /* min-height (not height) so the page colour always paints below the first screen (iOS Safari) */
+      html, body, #root { min-height: 100%; }
       html { scroll-behavior: smooth; background: #ffffff; }
       html.dark { background: #231f20; color-scheme: dark; }
       body {
@@ -113,7 +114,7 @@
         background: #ffffff; color: #231f20; margin: 0; overflow-x: hidden;
         cursor: none;
       }
-      html.dark body { background: #231f20; color: #f4eada; }
+      html.dark body, html.dark #root { background: #231f20; color: #f4eada; }
 
       /* ── Dark mode: light text, dark surfaces (photos, hero and lime buttons unchanged) ── */
       html.dark .text-ink-700{color:rgb(214 204 188 / 1)}
@@ -141,6 +142,8 @@
       html.dark .border-ink-900\/25{border-color:rgb(244 234 218 / 0.35)}
       html.dark .border-ink-900\/8{border-color:rgb(244 234 218 / 0.11)}
       html.dark .bg-white, html.dark .bg-bone-50, html.dark .bg-bone-100{background-color:#2b2627}
+      html.dark .placeholder-ink-700\/40::placeholder{color:rgb(214 204 188 / 0.45)}
+      html.dark footer .bg-white{background-color:#231f20}
       html.dark .bg-white\/70{background-color:rgb(35 31 32 / 0.7)}
       html.dark .bg-white\/85{background-color:rgb(35 31 32 / 0.85)}
       html.dark .bg-white\/90{background-color:rgb(35 31 32 / 0.9)}
@@ -245,13 +248,15 @@
       }
 
       .glass {
-        background: rgba(255,255,255,0.72);
+        background: rgba(255,255,255,0.86);
         backdrop-filter: blur(18px) saturate(140%);
         -webkit-backdrop-filter: blur(18px) saturate(140%);
         border: 1px solid rgba(35,31,32,0.08);
       }
+      .header-fade { background: linear-gradient(to bottom, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.9) 55%, rgba(255,255,255,0) 100%); }
+      html.dark .header-fade { background: linear-gradient(to bottom, rgba(35,31,32,0.96) 0%, rgba(35,31,32,0.9) 55%, rgba(35,31,32,0) 100%); }
       html.dark .glass {
-        background: rgba(35,31,32,0.45);
+        background: rgba(35,31,32,0.86);
         border-color: rgba(244,234,218,0.08);
       }
 
@@ -345,7 +350,7 @@
       type="text/babel"
       data-presets="react"
       data-type="module"
-      src="./app.jsx?v=2026110324"
+      src="./app.jsx?v=2026110326"
     ></script>
   </body>
 </html>
