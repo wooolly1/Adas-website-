@@ -798,7 +798,10 @@ function Footer() {
       <div className="border-t border-ink-900/10">
         <div className="mx-auto flex w-[min(1500px,94vw)] flex-col items-center justify-between gap-3 px-2 py-6 stamp text-ink-700/60 md:flex-row">
           <span>© ADAS ARCHITECTURE · MMXX — MMXXVI · ALL RIGHTS RESERVED</span>
-          <span>DESIGNED WITH ♥ IN JEDDAH</span>
+          <span className="flex items-center gap-6">
+            <Link to="/team" className="transition hover:text-gold-600">Team login</Link>
+            <span>DESIGNED WITH ♥ IN JEDDAH</span>
+          </span>
         </div>
       </div>
     </footer>
@@ -2384,6 +2387,8 @@ function FloatingActions() {
     const unsub = scrollY.on('change', (v) => setShow(v > 500));
     return () => unsub();
   }, [scrollY]);
+  const { path } = useContext(RouterCtx);
+  if (path === '/team') return null; // keep the check-in buttons clear on phones
   return (
     <div className="fixed bottom-6 right-6 z-[90] flex flex-col items-end gap-3">
       <a href="https://wa.me/966558593937" target="_blank" rel="noopener"
@@ -3269,6 +3274,219 @@ function BookPage() {
   );
 }
 
+/* ============================================================
+ *  TEAM ATTENDANCE (Microsoft 365 sign-in + location check-in)
+ *  Backend: api/attendance.js (Vercel) → Excel on OneDrive/SharePoint.
+ *  Setup: docs/attendance-setup.md. Fill in the two IDs below.
+ * ==========================================================*/
+
+const MS_CLIENT_ID = '';   // Application (client) ID
+const MS_TENANT_ID = '';   // Directory (tenant) ID
+const ATTENDANCE_API = '/api/attendance';
+const MS_SCOPES = ['openid', 'profile', 'email'];
+const attConfigured = () => !!(MS_CLIENT_ID && MS_TENANT_ID);
+
+let _msal = null;
+async function msal() {
+  if (_msal) return _msal;
+  const { PublicClientApplication } = await import('@azure/msal-browser');
+  const app = new PublicClientApplication({
+    auth: {
+      clientId: MS_CLIENT_ID,
+      authority: `https://login.microsoftonline.com/${MS_TENANT_ID}`,
+      redirectUri: `${window.location.origin}/auth-popup.html`,
+    },
+    cache: { cacheLocation: 'localStorage' },
+  });
+  await app.initialize();
+  _msal = app;
+  return app;
+}
+
+async function msIdToken(force = false) {
+  const app = await msal();
+  const account = app.getActiveAccount() || app.getAllAccounts()[0];
+  if (!account) return '';
+  try {
+    const r = await app.acquireTokenSilent({ scopes: MS_SCOPES, account, forceRefresh: force });
+    return r.idToken;
+  } catch (e) { return ''; }
+}
+
+async function attCall(action, body = {}) {
+  const send = async (force) => {
+    const token = await msIdToken(force);
+    if (!token) return { ok: false, error: 'signed_out' };
+    const res = await fetch(ATTENDANCE_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action, ...body }),
+    });
+    return res.json().catch(() => ({ ok: false, error: 'Connection problem. Please try again.' }));
+  };
+  const r = await send(false);
+  return r.error === 'signed_out' ? send(true) : r;
+}
+
+function getPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('This browser cannot share location.')); return; }
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+      (err) => reject(new Error(err.code === 1
+        ? 'Location permission was denied. Allow location for this site in your browser settings, then try again.'
+        : 'Could not get your location. Turn on GPS / location services and try again.')),
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+    );
+  });
+}
+
+function MicrosoftMark() {
+  return (
+    <svg viewBox="0 0 21 21" className="h-4 w-4" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" /><rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" /><rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
+
+function TeamPage() {
+  const [step, setStep] = useState('loading'); // loading | signin | home
+  const [me, setMe] = useState(null);           // { name, email, today }
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState(null);         // { type: 'error' | 'ok', text }
+  const [clock, setClock] = useState(new Date());
+
+  useEffect(() => { const t = setInterval(() => setClock(new Date()), 15000); return () => clearInterval(t); }, []);
+
+  const loadStatus = async () => {
+    const r = await attCall('status');
+    if (r.ok) { setMe(r); setStep('home'); return; }
+    setStep('signin');
+    if (r.error !== 'signed_out') setMsg({ type: 'error', text: r.error });
+  };
+
+  useEffect(() => {
+    if (!attConfigured()) { setStep('signin'); return; }
+    loadStatus().catch(() => setStep('signin'));
+  }, []);
+
+  const run = async (label, fn) => {
+    setBusy(label); setMsg(null);
+    try { await fn(); }
+    catch (e) { setMsg({ type: 'error', text: e.message || 'Connection problem. Please try again.' }); }
+    finally { setBusy(''); }
+  };
+
+  const signIn = () => run('signin', async () => {
+    const app = await msal();
+    try {
+      const r = await app.loginPopup({ scopes: MS_SCOPES, prompt: 'select_account' });
+      app.setActiveAccount(r.account);
+    } catch (e) {
+      if (/user_cancelled|popup_window_error/i.test(String(e && (e.errorCode || e.message)))) {
+        throw new Error('Sign-in was cancelled or the pop-up was blocked. Allow pop-ups for this site and try again.');
+      }
+      throw new Error('Microsoft sign-in failed. Please try again.');
+    }
+    await loadStatus();
+  });
+
+  const punch = (action) => run(action, async () => {
+    const pos = await getPosition();
+    const r = await attCall(action, pos);
+    if (!r.ok) { if (r.error === 'signed_out') { setStep('signin'); throw new Error('Your session expired. Please sign in again.'); } throw new Error(r.error); }
+    setMe((m) => ({ ...m, today: r.today }));
+    setMsg({ type: 'ok', text: action === 'checkIn' ? 'Checked in. Have a great day.' : 'Checked out. See you tomorrow.' });
+  });
+
+  const signOut = async () => {
+    try { const app = await msal(); if (app.clearCache) await app.clearCache(); app.setActiveAccount(null); } catch (e) { /* ignore */ }
+    setMe(null); setMsg(null); setStep('signin');
+  };
+
+  const today = me && me.today ? me.today : {};
+  const btn = 'magnetic-btn inline-flex w-full items-center justify-center gap-3 rounded-full px-7 py-4 text-[12px] uppercase tracking-widest-2 transition disabled:cursor-not-allowed disabled:opacity-40';
+
+  return (
+    <>
+      <PageHeader tag="— TEAM" title="Team" accent="Attendance."
+        subtitle="Sign in with your Microsoft office account, then check in and out from the office." />
+      <section className="relative pb-28">
+        <div className="mx-auto w-[min(560px,92vw)]">
+          <div className="glass rounded-3xl p-6 shadow-soft md:p-10">
+            {!attConfigured() && (
+              <p className="mb-6 rounded-xl border border-gold-400/40 bg-gold-400/10 p-4 text-sm text-ink-800">
+                Attendance is not connected yet. The admin needs to finish the one-time Microsoft 365 setup.
+              </p>
+            )}
+
+            {step === 'loading' && <p className="stamp text-ink-700/60">Loading…</p>}
+
+            {step === 'signin' && (
+              <div className="space-y-6">
+                <p className="text-sm leading-relaxed text-ink-800/80">Use your <span className="font-medium text-ink-900">@adas.com.sa</span> Microsoft account. Only team members on the staff list can sign in.</p>
+                <button onClick={signIn} disabled={!attConfigured() || !!busy}
+                  className={btn + ' border border-ink-900/15 bg-white text-ink-900 hover:border-gold-400'}>
+                  <MicrosoftMark />{busy === 'signin' ? 'Signing in…' : 'Sign in with Microsoft'}
+                </button>
+              </div>
+            )}
+
+            {step === 'home' && me && (
+              <div>
+                <p className="stamp text-gold-600">Signed in</p>
+                <h2 className="mt-2 font-display text-4xl leading-tight text-ink-900">Hello, {me.name}</h2>
+                <p className="mt-1 text-sm text-ink-800/70">
+                  {clock.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Riyadh' })}
+                  {' · '}{clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' })}
+                </p>
+
+                <div className="mt-8 grid grid-cols-2 gap-3">
+                  {[['Check in', today.checkIn], ['Check out', today.checkOut]].map(([k, v]) => (
+                    <div key={k} className="rounded-2xl border border-ink-900/10 p-4">
+                      <p className="stamp text-ink-700/50">{k}</p>
+                      <p className="mt-2 font-display text-3xl text-ink-900">{v || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+                {today.hours && <p className="mt-3 text-sm text-ink-800/70">Today: {today.hours} hours</p>}
+
+                <div className="mt-8 space-y-3">
+                  {!today.checkIn && (
+                    <button onClick={() => punch('checkIn')} disabled={!!busy} className={btn + ' bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+                      {busy === 'checkIn' ? 'Checking your location…' : 'Check in'}
+                    </button>
+                  )}
+                  {today.checkIn && !today.checkOut && (
+                    <button onClick={() => punch('checkOut')} disabled={!!busy} className={btn + ' bg-ink-900 text-bone-100 hover:bg-ink-800'}>
+                      {busy === 'checkOut' ? 'Checking your location…' : 'Check out'}
+                    </button>
+                  )}
+                  {today.checkIn && today.checkOut && (
+                    <p className="rounded-2xl bg-gold-400/10 p-4 text-center text-sm text-ink-800">You're done for today.</p>
+                  )}
+                </div>
+                <button onClick={signOut} className="stamp mt-8 w-full text-center text-ink-700/60 hover:text-gold-600">Sign out</button>
+              </div>
+            )}
+
+            {msg && (
+              <p role="status" className={'mt-6 rounded-xl p-4 text-sm ' + (msg.type === 'error' ? 'bg-red-500/10 text-red-700' : 'bg-gold-400/10 text-ink-800')}>
+                {msg.text}
+              </p>
+            )}
+          </div>
+          <p className="mt-6 text-center text-xs leading-relaxed text-ink-700/60">
+            Your location is read only when you press Check in or Check out, to confirm you are at the office.
+            It is saved with your attendance record and used for nothing else.
+          </p>
+        </div>
+      </section>
+    </>
+  );
+}
+
 function PageSwitcher() {
   const { pathname } = useLocation();
   let Page = HomePage;
@@ -3277,6 +3495,7 @@ function PageSwitcher() {
   else if (pathname === '/projects') Page = ProjectsPage;
   else if (pathname === '/contact') Page = ContactPage;
   else if (pathname.startsWith('/book/')) Page = BookPage;
+  else if (pathname === '/team') Page = TeamPage;
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
