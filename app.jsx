@@ -888,7 +888,7 @@ function HomeHero() {
         <PrettyImg
           src="./hero.jpg"
           fallback="https://images.unsplash.com/photo-1487958449943-2429e8be8625?auto=format&fit=crop&w=2400&q=80"
-          objectPosition="center 38%"
+          objectPosition="center 50%"
           alt="ADAS architecture — pool and villa at dusk"
           className="h-full w-full" />
         <div className="absolute inset-0 bg-gradient-to-b from-ink-950/55 via-ink-950/40 to-ink-950" />
