@@ -55,7 +55,22 @@ website's **Vercel** project. Time: about 20 minutes.
    Set `Start` and `End` to *Number format → Text* as well. The website adds and updates
    these rows; `Status` is Pending, Approved, Rejected or Cancelled. To correct an approved
    request, edit its `Status` or `Days` cell directly.
-5. Leave the Attendance table empty — the website adds the rows. Don't rename the tables
+5. **Sheet "Holidays"** (optional, for annual leave) — headers in row 1, *Insert → Table*,
+   name it **`Holidays`**. Three columns:
+
+   | Start | End | Name |
+   |---|---|---|
+   | 2027-02-22 | | Founding Day |
+   | 2026-09-23 | | National Day |
+   | *(official start)* | *(official end)* | Eid al-Fitr |
+   | *(official start)* | *(official end)* | Eid al-Adha |
+
+   - Dates as `YYYY-MM-DD` (set the columns to *Text*). Leave `End` blank for a one-day holiday.
+   - Days in this table are not counted as leave, and staff see the upcoming ones on the Team page.
+   - Eid dates follow the official announcement each year, so add them when they are announced.
+     Holidays added later also apply to pending requests' future counts, but not to requests
+     already sent — adjust `Days` in the Leave table if needed.
+6. Leave the Attendance table empty — the website adds the rows. Don't rename the tables
    or move the columns. You can add your own sheets, pivot tables and charts freely.
 
 ## 2. Register the app in Microsoft Entra

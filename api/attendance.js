@@ -237,14 +237,30 @@ const LEAVE_COLUMNS = 11;
 const LEAVE_MISSING = 'Annual leave is not set up yet. Please ask the admin to add the "Leave" table to the workbook.';
 const isoDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
 
-/** Working days (Sun–Thu) from start to end inclusive. */
-function workingDays(start, end) {
+/** Working days (Sun–Thu, not a public holiday) from start to end inclusive. */
+function workingDays(start, end, holidays = new Set()) {
   let n = 0;
   for (let d = new Date(start + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
     const w = d.getUTCDay();
-    if (w !== 5 && w !== 6) n++;
+    if (w !== 5 && w !== 6 && !holidays.has(d.toISOString().slice(0, 10))) n++;
   }
   return n;
+}
+
+/* Holidays table (optional): Start | End (optional, for multi-day) | Name. Missing table = no holidays. */
+async function holidayList() {
+  let rows;
+  try { rows = await tableRows('Holidays', 'no-holidays'); }
+  catch (e) { if (e.status !== 503) console.warn('Holidays table unreadable, counting without holidays:', e.message); return []; }
+  const out = [];
+  for (const row of rows) {
+    const start = cellDay(row[0]), end = cellDay(row[1]) || start, name = String(row[2] || '').trim();
+    if (!isoDay(start) || !isoDay(end) || end < start) continue;
+    for (let d = new Date(start + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+      out.push({ date: d.toISOString().slice(0, 10), name });
+    }
+  }
+  return out;
 }
 
 function leaveFrom(row, index) {
@@ -285,10 +301,12 @@ async function notify(to, subject, text) {
 
 async function handleLeave(b, staff, name) {
   const year = Number(riyadh().day.slice(0, 4));
-  const leave = await allLeave();
+  const [leave, holidays] = await Promise.all([allLeave(), holidayList()]);
+  const holidaySet = new Set(holidays.map((h) => h.date));
   const view = async () => {
     const mine = leave.filter((l) => l.email === staff.email).sort((x, y) => y.start.localeCompare(x.start)).map(publicLeave);
-    const out = { ok: true, manager: staff.manager, balance: balanceFor(staff, leave, year), requests: mine };
+    const out = { ok: true, manager: staff.manager, balance: balanceFor(staff, leave, year), requests: mine,
+      holidays: holidays.filter((h) => h.date >= riyadh().day).slice(0, 60) };
     if (staff.manager) {
       const team = (await tableRows('Staff')).map(staffFrom).filter((s) => s.active);
       const byEmail = Object.fromEntries(team.map((s) => [s.email, s]));
@@ -307,8 +325,8 @@ async function handleLeave(b, staff, name) {
     if (end < start) throw new HttpError(400, 'The end date is before the start date.');
     if (start < riyadh().day) throw new HttpError(400, 'Leave can only be requested from today onwards.');
     if (start.slice(0, 4) !== end.slice(0, 4)) throw new HttpError(400, 'Please split leave that crosses the new year into two requests.');
-    const days = workingDays(start, end);
-    if (days === 0) throw new HttpError(400, 'Those dates are only Fridays/Saturdays — no working days to request.');
+    const days = workingDays(start, end, holidaySet);
+    if (days === 0) throw new HttpError(400, 'Those dates are only weekends or public holidays — no working days to request.');
     const clash = leave.find((l) => l.email === staff.email && /^(pending|approved)$/i.test(l.status) && l.start <= end && start <= l.end);
     if (clash) throw new HttpError(409, `You already have a ${clash.status.toLowerCase()} request for ${clash.start} — ${clash.end}.`);
     const bal = balanceFor(staff, leave, Number(start.slice(0, 4)));
