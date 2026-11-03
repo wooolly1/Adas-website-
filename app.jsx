@@ -83,13 +83,25 @@ function NavLink({ to, children, className, onClick, end = false, ...rest }) {
  * ==========================================================*/
 
 const PROJECTS = [
-  { id: 'private-palace', disciplines: ['Architecture'], title: "Yousif's Palace", category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Landscape', role: 'Architecture · Landscape', status: 'Design · 3D Visualisation', tagline: 'A private palace set within layered gardens, opening onto a sunlit pool court.',
+  { id: 'private-palace', disciplines: ['Architecture', 'Interior Design'], title: "Yousif's Palace", category: 'Residential', year: '2023', location: 'Jeddah, KSA', size: 'Architecture & Landscape', role: 'Architecture · Landscape', status: 'Design · 3D Visualisation', tagline: 'A private palace set within layered gardens, opening onto a sunlit pool court.',
     description: [
       'A family palace in Jeddah composed as a sequence of calm, stone-clad volumes. Deep overhangs and timber soffits shade the glazing, while the main living spaces open directly onto a generous pool court with in-water loungers and timber decks.',
       'Landscape is treated as architecture: olive trees, palms and bougainvillea frame the entrances, and a curved garden walk leads the family from the gate to the outdoor lounges.',
     ],
     img: './projects/private-palace-1/01.webp',
     gallery: Array.from({ length: 12 }, (_, i) => `./projects/private-palace-1/${String(i + 1).padStart(2, '0')}.webp`),
+    views: {
+      'Interior Design': {
+        size: 'Interior Design', role: 'Interior Design',
+        tagline: 'A palace interior where Hijazi geometry meets calm, contemporary luxury.',
+        description: [
+          'The reception floor is built for hospitality. The formal majlis is framed by tall arched panels of carved geometric lattice beneath cascading crystal chandeliers, and a double-height entrance hall rises past arched stained-glass windows and a carved screen to the upper gallery. A formal dining hall seats twenty under a sculpted brass chandelier.',
+          'Beyond the formal rooms, the family wing turns warmer: a family dining room and open kitchen, garden-facing lounges behind full-height glazing, and a master suite with a tufted headboard, a dressing room, a book-matched marble bath and a private gym lined in timber slats.',
+        ],
+        img: './projects/private-palace-1/interior/01.webp',
+        gallery: Array.from({ length: 19 }, (_, i) => `./projects/private-palace-1/interior/${String(i + 1).padStart(2, '0')}.webp`),
+      },
+    },
     span: 'tall' },
   { id: 'private-palace-2', disciplines: ['Architecture'], title: "Abdullah's Palace", category: 'Residential', year: '2026', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'One family palace, two façade studies: layered stone at dusk, classical white by day.',
     description: [
@@ -1872,7 +1884,9 @@ function ProjectsGrid() {
   const sections = useMemo(() => SECTORS
     .map((sector) => ({
       sector,
-      projects: PROJECTS.filter((p) => p.category === sector && p.disciplines.includes(discipline)).map((p) => viewFor(p, discipline)),
+      projects: PROJECTS.filter((p) => p.category === sector && p.disciplines.includes(discipline))
+        .map((p) => viewFor(p, discipline))
+        .sort((a, b) => Number(b.year) - Number(a.year)),
     }))
     .filter((s) => s.projects.length > 0), [discipline]);
 
