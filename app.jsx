@@ -146,7 +146,7 @@ const PROJECTS = [
   { id: 'villa-4', disciplines: ['Architecture', 'Interior Design'], title: "Assim's Villa", category: 'Residential', year: '2025', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'Warm stone, dark frames and a quiet, lantern-lit entrance.',
     description: [
       'A contemporary family villa built from warm stone volumes and deep, dark-framed openings, topped by a glazed roof pavilion that opens onto the terrace.',
-      'The approach is choreographed as a sequence: floating lit steps lead to a tall pivot door beside a textured feature wall, while the boundary wall alternates timber fins, planted green strips and a softly backlit stone panel.',
+      'The approach is choreographed as a sequence: floating lit steps lead to a tall pivot door beside a textured feature wall, while the boundary wall alternates timber fins, planted green strips and a backlit water wall that falls like a quiet waterfall.',
     ],
     img: './projects/villa-4/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-4/${String(i + 1).padStart(2, '0')}.webp`),
