@@ -177,12 +177,37 @@ const summary = (rec) => (rec
   ? { checkIn: String(rec.row[3] || ''), checkOut: String(rec.row[8] || ''), hours: rec.row[13] === '' ? '' : String(rec.row[13]) }
   : { checkIn: '', checkOut: '', hours: '' });
 
+/* ADAS office, Jeddah: 21°43'22.9"N 39°08'03.8"E. */
+const OFFICE_DEFAULT = { lat: 21.723028, lng: 39.134389 };
+
+/** One coordinate from text: "21.723028", "21,723028", "21°43'22.9\"N", "39 08 03.8 E". */
+function parseCoord(text) {
+  const t = String(text || '').trim().replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+  if (!t) return NaN;
+  const nums = t.replace(/(\d),(\d)/g, '$1.$2').match(/-?\d+(?:\.\d+)?/g);
+  if (!nums) return NaN;
+  let v = Math.abs(Number(nums[0])) + (nums[1] ? Number(nums[1]) / 60 : 0) + (nums[2] ? Number(nums[2]) / 3600 : 0);
+  if (/^-|[SsWw]\s*$/.test(t)) v = -v;
+  return v;
+}
+
+/** Office position from Vercel settings, tolerating common formats; falls back to the ADAS office. */
+function officeLocation() {
+  let lat = env('OFFICE_LAT'), lng = env('OFFICE_LNG');
+  // both values pasted into one field: "21.723028, 39.134389" or "21°43'22.9\"N 39°08'03.8\"E"
+  const pair = (s) => s.match(/^(.*?[NnSs]|-?\d+(?:\.\d+)?)\s*[,;\s]\s*(.+)$/);
+  if (lat && !lng && pair(lat)) { const m = pair(lat); lat = m[1]; lng = m[2]; }
+  if (lng && !lat && pair(lng)) { const m = pair(lng); lat = m[1]; lng = m[2]; }
+  const pLat = parseCoord(lat), pLng = parseCoord(lng);
+  const valid = Math.abs(pLat) > 0 && Math.abs(pLat) <= 90 && Math.abs(pLng) > 0 && Math.abs(pLng) <= 180;
+  if ((lat || lng) && !valid) console.warn('OFFICE_LAT/OFFICE_LNG not understood, using the default office location:', lat, lng);
+  return valid ? { lat: pLat, lng: pLng } : OFFICE_DEFAULT;
+}
+
 function checkPlace(b) {
   const lat = Number(b.lat), lng = Number(b.lng), acc = Number(b.accuracy);
-  // ADAS office, Jeddah (21°43'22.9"N 39°08'03.8"E); Vercel env vars override.
-  const oLat = Number(env('OFFICE_LAT', '21.723028')), oLng = Number(env('OFFICE_LNG', '39.134389'));
+  const { lat: oLat, lng: oLng } = officeLocation();
   const radius = Number(env('RADIUS_M', '150'));
-  if (!oLat || !oLng) throw new HttpError(500, 'Office location is not set up yet. Please tell the admin.');
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new HttpError(400, 'Location is missing. Please allow location access and try again.');
   if (!Number.isFinite(acc) || acc > MAX_ACCURACY_M) {
     throw new HttpError(400, `Your location is not precise enough (±${Math.round(acc || 0)} m). Turn on GPS / precise location and try again.`);
@@ -242,4 +267,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = { maxDuration: 15 };
-module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime };
+module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation };
