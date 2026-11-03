@@ -123,18 +123,30 @@ const PROJECTS = [
     img: './projects/villa-2/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-2/${String(i + 1).padStart(2, '0')}.webp`),
     span: 'normal' },
-  { id: 'villa-3', disciplines: ['Architecture'], title: "Gaith's Villa", category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A garden villa crowned by a double-height arched window.',
+  { id: 'villa-3', disciplines: ['Architecture', 'Interior Design'], title: "Gaith's Villa", category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A garden villa crowned by a double-height arched window.',
     description: [
       'A compact family villa composed around a tall arched window that lights the main stair and living hall. A perforated stone screen beside it filters the afternoon sun, and a planted roof terrace softens the skyline.',
       'At street level, a timber pergola and bougainvillea frame the arched front door, while a sliding timber gate lets the forecourt switch between a welcoming entrance and private parking.',
     ],
     img: './projects/villa-3/01.webp',
     gallery: ['./projects/villa-3/01.webp', './projects/villa-3/02.webp'],
+    views: {
+      'Interior Design': {
+        size: 'Interior Design', role: 'Interior Design',
+        tagline: 'The villa’s arches, carried inside in warm oak and soft light.',
+        description: [
+          'Inside, the arch that defines the façade becomes the language of every room: arched timber doors and niches, an arched headboard in woven rattan, and a double-height living hall where rattan pendants hang beneath the great arched window.',
+          'Warm oak, cream plaster and olive-green accents keep the palette calm, while a planted courtyard full of bougainvillea brings the garden into the dining room and the kitchen opens onto greenery through a tall picture window.',
+        ],
+        img: './projects/villa-3/interior/01.webp',
+        gallery: Array.from({ length: 9 }, (_, i) => `./projects/villa-3/interior/${String(i + 1).padStart(2, '0')}.webp`),
+      },
+    },
     span: 'normal' },
   { id: 'villa-4', disciplines: ['Architecture', 'Interior Design'], title: "Assim's Villa", category: 'Residential', year: '2025', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'Warm stone, dark frames and a quiet, lantern-lit entrance.',
     description: [
       'A contemporary family villa built from warm stone volumes and deep, dark-framed openings, topped by a glazed roof pavilion that opens onto the terrace.',
-      'The approach is choreographed as a sequence: floating lit steps lead to a tall pivot door beside a textured feature wall, while the boundary wall alternates timber fins, planted green strips and a softly backlit stone panel.',
+      'The approach is choreographed as a sequence: floating lit steps lead to a tall pivot door beside a textured feature wall, while the boundary wall alternates timber fins, planted green strips and a backlit water wall that falls like a quiet waterfall.',
     ],
     img: './projects/villa-4/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-4/${String(i + 1).padStart(2, '0')}.webp`),
