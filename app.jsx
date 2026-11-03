@@ -135,7 +135,7 @@ const PROJECTS = [
     img: './projects/villa-2/01.webp',
     gallery: Array.from({ length: 3 }, (_, i) => `./projects/villa-2/${String(i + 1).padStart(2, '0')}.webp`),
     span: 'normal' },
-  { id: 'villa-3', disciplines: ['Architecture', 'Interior Design'], title: "Gaith's Villa", category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A garden villa crowned by a double-height arched window.',
+  { id: 'villa-3', disciplines: ['Architecture', 'Interior Design'], title: "Nadia's Villa", category: 'Residential', year: '2024', location: 'Jeddah, KSA', size: 'Architecture', role: 'Architecture', status: 'Design · 3D Visualisation', tagline: 'A garden villa crowned by a double-height arched window.',
     description: [
       'A compact family villa composed around a tall arched window that lights the main stair and living hall. A perforated stone screen beside it filters the afternoon sun, and a planted roof terrace softens the skyline.',
       'At street level, a timber pergola and bougainvillea frame the arched front door, while a sliding timber gate lets the forecourt switch between a welcoming entrance and private parking.',
