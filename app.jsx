@@ -666,6 +666,8 @@ function Navbar({ onOpenMenu }) {
     <motion.header ref={headerRef} initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.9, ease: [0.77, 0, 0.18, 1], delay: 0.1 }}
       className={'fixed inset-x-0 top-0 z-[80] transition-all duration-500 ' + (scrolled ? 'py-3' : 'py-6')}>
+      {/* soft fade in the page colour so scrolling content doesn't collide with the floating pills */}
+      <div aria-hidden="true" className={'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[150%] transition-opacity duration-500 ' + (scrolled ? 'opacity-100' : 'opacity-0')} />
       <div className="mx-auto flex w-[min(1500px,94vw)] items-center justify-between">
         <div ref={logoRef} className={'flex items-center gap-4 rounded-full px-4 py-2 transition-all duration-500 ' +
           (scrolled ? 'glass shadow-soft ' : 'bg-transparent ') + (onDark ? 'text-white' : 'text-ink-900')}>
@@ -779,9 +781,9 @@ function Footer() {
         <div className="md:col-span-4">
           <p className="stamp text-ink-700/60">Newsletter — Quarterly</p>
           <p className="mt-3 text-ink-800/80">Four pieces of writing a year. Slow, considered, and never about us.</p>
-          <form className="mt-6 flex items-center overflow-hidden rounded-full bg-white"
+          <form className="mt-6 flex items-center overflow-hidden rounded-full border border-ink-900/12 bg-white"
             onSubmit={(e) => e.preventDefault()}>
-            <input type="email" required placeholder="your.address@studio.com"
+            <input type="email" required placeholder="name@email.com"
               className="flex-1 border-0 bg-transparent px-5 py-3 text-sm text-ink-900 placeholder-ink-700/40 outline-none focus:border-0 focus:outline-none focus:ring-0" />
             <button className="bg-gold-400 px-5 py-3 text-[11px] uppercase tracking-widest-2 text-ink-900 transition hover:bg-gold-500 hover:text-white">
               Subscribe
@@ -800,7 +802,7 @@ function Footer() {
       <div className="border-t border-ink-900/10">
         <div className="mx-auto flex w-[min(1500px,94vw)] flex-col items-center justify-between gap-3 px-2 py-6 stamp text-ink-700/60 md:flex-row">
           <span>© ADAS ARCHITECTURE · MMXX — MMXXVI · ALL RIGHTS RESERVED</span>
-          <span className="flex items-center gap-6">
+          <span className="flex flex-col items-center gap-3 sm:flex-row sm:gap-6">
             <Link to="/team" className="transition hover:text-gold-600">Team login</Link>
             <span>DESIGNED WITH ♥ IN JEDDAH</span>
           </span>
