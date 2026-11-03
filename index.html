@@ -108,42 +108,53 @@
       /* min-height (not height) so the page colour always paints below the first screen (iOS Safari) */
       html, body, #root { min-height: 100%; }
       html { scroll-behavior: smooth; background: #ffffff; }
-      html.dark { background: #231f20; color-scheme: dark; }
+      html.dark { background: #1f1a17; color-scheme: dark; }
       body {
         font-family: Manrope, system-ui, sans-serif;
         background: #ffffff; color: #231f20; margin: 0; overflow-x: hidden;
         cursor: none;
       }
-      html.dark body, html.dark #root { background: #231f20; color: #f4eada; }
 
-      /* ── Dark mode: light text, dark surfaces (photos, hero and lime buttons unchanged) ── */
-      html.dark .text-ink-700{color:rgb(214 204 188 / 1)}
-      html.dark .text-ink-700\/25{color:rgb(214 204 188 / 0.25)}
-      html.dark .text-ink-700\/30{color:rgb(214 204 188 / 0.3)}
-      html.dark .text-ink-700\/40{color:rgb(214 204 188 / 0.4)}
-      html.dark .text-ink-700\/50{color:rgb(214 204 188 / 0.5)}
-      html.dark .text-ink-700\/60{color:rgb(214 204 188 / 0.6)}
-      html.dark .text-ink-700\/70{color:rgb(214 204 188 / 0.7)}
-      html.dark .text-ink-800{color:rgb(232 222 204 / 1)}
-      html.dark .text-ink-800\/60{color:rgb(232 222 204 / 0.6)}
-      html.dark .text-ink-800\/70{color:rgb(232 222 204 / 0.7)}
-      html.dark .text-ink-800\/75{color:rgb(232 222 204 / 0.75)}
-      html.dark .text-ink-800\/80{color:rgb(232 222 204 / 0.8)}
-      html.dark .text-ink-800\/90{color:rgb(232 222 204 / 0.9)}
-      html.dark .text-ink-900{color:rgb(244 234 218 / 1)}
+      /* ── Dark mode — ADAS palette: deep ink surfaces, cream headings, sand text, beige labels, lime + lilac accents ── */
+      html.dark, html.dark body, html.dark #root{background:rgb(31 26 23);color:#f4eada}
+      html.dark .text-ink-700{color:rgb(196 173 139 / 1.00)}
+      html.dark .text-ink-700\/25{color:rgb(196 173 139 / 0.31)}
+      html.dark .text-ink-700\/30{color:rgb(196 173 139 / 0.38)}
+      html.dark .text-ink-700\/40{color:rgb(196 173 139 / 0.50)}
+      html.dark .text-ink-700\/50{color:rgb(196 173 139 / 0.62)}
+      html.dark .text-ink-700\/60{color:rgb(196 173 139 / 0.75)}
+      html.dark .text-ink-700\/70{color:rgb(196 173 139 / 0.88)}
+      html.dark .text-ink-800{color:rgb(232 220 196 / 1.00)}
+      html.dark .text-ink-800\/60{color:rgb(232 220 196 / 0.60)}
+      html.dark .text-ink-800\/70{color:rgb(232 220 196 / 0.70)}
+      html.dark .text-ink-800\/75{color:rgb(232 220 196 / 0.75)}
+      html.dark .text-ink-800\/80{color:rgb(232 220 196 / 0.80)}
+      html.dark .text-ink-800\/90{color:rgb(232 220 196 / 0.90)}
+      html.dark .text-ink-900{color:rgb(244 234 218 / 1.00)}
       html.dark .text-ink-900\/35{color:rgb(244 234 218 / 0.35)}
       html.dark .text-ink-900\/45{color:rgb(244 234 218 / 0.45)}
-      html.dark .text-ink-900\/90{color:rgb(244 234 218 / 0.9)}
-      html.dark .placeholder\:text-ink-700\/40::placeholder{color:rgb(214 204 188 / 0.4)}
-      html.dark .border-ink-900\/10{border-color:rgb(244 234 218 / 0.14)}
-      html.dark .border-ink-900\/12{border-color:rgb(244 234 218 / 0.17)}
-      html.dark .border-ink-900\/15{border-color:rgb(244 234 218 / 0.21)}
-      html.dark .border-ink-900\/20{border-color:rgb(244 234 218 / 0.28)}
-      html.dark .border-ink-900\/25{border-color:rgb(244 234 218 / 0.35)}
-      html.dark .border-ink-900\/8{border-color:rgb(244 234 218 / 0.11)}
-      html.dark .bg-white, html.dark .bg-bone-50, html.dark .bg-bone-100{background-color:#2b2627}
-      html.dark .placeholder-ink-700\/40::placeholder{color:rgb(214 204 188 / 0.45)}
-      html.dark footer .bg-white{background-color:#231f20}
+      html.dark .text-ink-900\/90{color:rgb(244 234 218 / 0.90)}
+      html.dark .placeholder\:text-ink-700\/40::placeholder{color:rgb(196 173 139 / 0.6)}
+      html.dark .placeholder-ink-700\/40::placeholder{color:rgb(196 173 139 / 0.6)}
+      html.dark .border-ink-900\/10{border-color:rgb(222 201 178 / 0.13)}
+      html.dark .border-ink-900\/12{border-color:rgb(222 201 178 / 0.16)}
+      html.dark .border-ink-900\/15{border-color:rgb(222 201 178 / 0.20)}
+      html.dark .border-ink-900\/20{border-color:rgb(222 201 178 / 0.26)}
+      html.dark .border-ink-900\/25{border-color:rgb(222 201 178 / 0.33)}
+      html.dark .border-ink-900\/8{border-color:rgb(222 201 178 / 0.10)}
+      html.dark .border-bone-200{border-color:rgb(222 201 178 / 0.12)}
+      html.dark .bg-white, html.dark .bg-bone-50, html.dark .bg-bone-100{background-color:rgb(42 35 31)}
+      html.dark .bg-white\/70{background-color:rgb(31 26 23 / 0.7)}
+      html.dark .bg-white\/85{background-color:rgb(31 26 23 / 0.85)}
+      html.dark .bg-white\/90{background-color:rgb(31 26 23 / 0.9)}
+      html.dark .bg-white\/95{background-color:rgb(31 26 23 / 0.95)}
+      html.dark .bg-bone-100\/30{background-color:rgb(42 35 31 / 0.7)}
+      html.dark .bg-bone-100\/40{background-color:rgb(42 35 31 / 0.7)}
+      html.dark footer{background-color:#181412}
+      html.dark footer .bg-white{background-color:rgb(42 35 31)}
+      html.dark .bg-ink-900.text-bone-100{background-color:#f4eada;color:#2a231f}
+      html.dark .bg-ink-900.text-bone-100:hover{background-color:#e8dcc4}
+      html.dark .bg-gold-300.text-ink-900, html.dark .bg-gold-300 .text-ink-900, html.dark .bg-gold-300.text-ink-800, html.dark .bg-gold-300 .text-ink-800, html.dark .bg-gold-400.text-ink-900, html.dark .bg-gold-400 .text-ink-900, html.dark .bg-gold-400.text-ink-800, html.dark .bg-gold-400 .text-ink-800, html.dark .bg-gold-500.text-ink-900, html.dark .bg-gold-500 .text-ink-900, html.dark .bg-gold-500.text-ink-800, html.dark .bg-gold-500 .text-ink-800{color:#231f20}
       html.dark .bg-white\/70{background-color:rgb(35 31 32 / 0.7)}
       html.dark .bg-white\/85{background-color:rgb(35 31 32 / 0.85)}
       html.dark .bg-white\/90{background-color:rgb(35 31 32 / 0.9)}
@@ -151,7 +162,7 @@
       html.dark .bg-bone-100\/30{background-color:rgb(43 38 39 / 0.3)}
       html.dark .bg-bone-100\/40{background-color:rgb(43 38 39 / 0.4)}
       html.dark .border-bone-200{border-color:rgb(244 234 218 / 0.12)}
-      html.dark .bg-ink-900.text-bone-100{background-color:#f4eada;color:#231f20}
+      html.dark .bg-ink-900.text-bone-100{background-color:#f4eada;color:#2a231f}
       html.dark .bg-ink-900.text-bone-100:hover{background-color:#e8dcc4}
       html.dark .bg-gold-300.text-ink-900, html.dark .bg-gold-300 .text-ink-900, html.dark .bg-gold-300.text-ink-800, html.dark .bg-gold-300 .text-ink-800, html.dark .bg-gold-400.text-ink-900, html.dark .bg-gold-400 .text-ink-900, html.dark .bg-gold-400.text-ink-800, html.dark .bg-gold-400 .text-ink-800, html.dark .bg-gold-500.text-ink-900, html.dark .bg-gold-500 .text-ink-900, html.dark .bg-gold-500.text-ink-800, html.dark .bg-gold-500 .text-ink-800{color:#231f20}
       a, button, input, textarea, select, [role='button'] { cursor: none; }
@@ -254,10 +265,10 @@
         border: 1px solid rgba(35,31,32,0.08);
       }
       .header-fade { background: linear-gradient(to bottom, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.9) 55%, rgba(255,255,255,0) 100%); }
-      html.dark .header-fade { background: linear-gradient(to bottom, rgba(35,31,32,0.96) 0%, rgba(35,31,32,0.9) 55%, rgba(35,31,32,0) 100%); }
+      html.dark .header-fade { background: linear-gradient(to bottom, rgba(31,26,23,0.96) 0%, rgba(31,26,23,0.9) 55%, rgba(31,26,23,0) 100%); }
       html.dark .glass {
-        background: rgba(35,31,32,0.86);
-        border-color: rgba(244,234,218,0.08);
+        background: rgba(31,26,23,0.86);
+        border-color: rgba(222,201,178,0.12);
       }
 
       .img-fallback {
@@ -350,7 +361,7 @@
       type="text/babel"
       data-presets="react"
       data-type="module"
-      src="./app.jsx?v=2026110326"
+      src="./app.jsx?v=2026110328"
     ></script>
   </body>
 </html>
