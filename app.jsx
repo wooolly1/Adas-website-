@@ -3385,14 +3385,18 @@ function MicrosoftMark() {
   );
 }
 
-/* Working days (Sun–Thu) between two YYYY-MM-DD dates, inclusive — mirrors the API */
-function leaveDays(start, end) {
-  if (!start || !end || end < start) return 0;
-  let n = 0;
+/* Working days (Sun–Thu, not a public holiday) between two YYYY-MM-DD dates, inclusive — mirrors the API */
+function leaveDays(start, end, holidays = []) {
+  if (!start || !end || end < start) return { days: 0, skipped: [] };
+  const byDate = Object.fromEntries(holidays.map((h) => [h.date, h.name]));
+  let n = 0; const skipped = [];
   for (let d = new Date(start + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
-    const w = d.getUTCDay(); if (w !== 5 && w !== 6) n++;
+    const w = d.getUTCDay(), iso = d.toISOString().slice(0, 10);
+    if (w === 5 || w === 6) continue;
+    if (iso in byDate) { if (!skipped.includes(byDate[iso])) skipped.push(byDate[iso] || 'Public holiday'); continue; }
+    n++;
   }
-  return n;
+  return { days: n, skipped };
 }
 const fmtLeaveDate = (iso) => (iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
 const LEAVE_TONE = {
@@ -3423,7 +3427,7 @@ function AnnualLeave() {
 
   useEffect(() => { run('load', { action: 'leaveStatus' }); }, []);
 
-  const days = leaveDays(start, end);
+  const { days, skipped } = leaveDays(start, end, (data && data.holidays) || []);
   const bal = data && data.balance;
   const submit = async (e) => {
     e.preventDefault();
@@ -3472,15 +3476,30 @@ function AnnualLeave() {
             </label>
             {start && end && (
               <p className={'text-sm ' + (days > bal.remaining ? 'text-red-700' : 'text-ink-800/80')}>
-                {days === 0 ? 'No working days in these dates (Fri & Sat don\'t count).'
+                {days === 0 ? 'No working days in these dates (weekends and public holidays don\'t count).'
                   : `${days} working day${days === 1 ? '' : 's'} · ${Math.max(0, bal.remaining - days)} would remain`}
                 {days > bal.remaining && ` — more than your ${bal.remaining} days left.`}
+                {skipped.length > 0 && <span className="block text-xs text-ink-800/60">Not counted: {skipped.join(', ')}</span>}
               </p>
             )}
             <button type="submit" disabled={!!busy || !days || days > bal.remaining} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
               {busy === 'request' ? 'Sending…' : 'Send to manager'}
             </button>
           </form>
+
+          {data.holidays && data.holidays.length > 0 && (
+            <details className="mt-6">
+              <summary className="cursor-pointer stamp text-ink-700/60 hover:text-gold-600">Upcoming public holidays</summary>
+              <ul className="mt-3 space-y-1 text-sm">
+                {Object.values(data.holidays.reduce((acc, h) => {
+                  const k = (h.name || h.date) + '|' + h.date.slice(0, 4); (acc[k] = acc[k] || { name: h.name || 'Public holiday', from: h.date, to: h.date }).to = h.date; return acc;
+                }, {})).map((h) => (
+                  <li key={h.name + h.from} className="flex justify-between gap-3"><span className="text-ink-900">{h.name}</span>
+                    <span className="text-ink-800/70">{fmtLeaveDate(h.from)}{h.to !== h.from && ` — ${fmtLeaveDate(h.to)}`}</span></li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           {data.requests.length > 0 && (
             <div className="mt-8 border-t border-ink-900/10 pt-6">
