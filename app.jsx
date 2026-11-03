@@ -232,7 +232,7 @@ const PROJECTS = [
     img: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&w=1600&q=80', span: 'tall' },
   { id: 'knowledge-city', disciplines: ['Architecture'], title: 'Knowledge City Business Park', category: 'Hospitality & Admin', year: '2024', location: 'Riyadh, KSA', size: 'Mixed-use Masterplan', role: 'Architecture · Planning', tagline: 'A campus of working buildings stitched around a green spine.',
     img: 'https://images.unsplash.com/photo-1545239351-1141bd82e8a6?auto=format&fit=crop&w=1600&q=80', span: 'wide' },
-  { id: 'verve', disciplines: ['Architecture'], title: 'Verve', category: 'Hospitality & Admin', year: '', location: 'Jeddah, KSA', size: 'Office Building', role: 'Architecture · Façade', status: 'Design · 3D Visualisation', tagline: 'A sleek glass headquarters for a workspace brand.',
+  { id: 'verve', disciplines: ['Architecture'], title: 'Verve', category: 'Hospitality & Admin', year: '2024', location: 'Jeddah, KSA', size: 'Office Building', role: 'Architecture · Façade', status: 'Design · 3D Visualisation', tagline: 'A sleek glass headquarters for a workspace brand.',
     description: [
       'A two-storey office building for Verve, a workspace solutions provider. The façade wraps the corner in a gentle curve of glass held by slim dark mullions, giving the building a single, continuous presence along the street.',
       'A deep fascia band carries bilingual signage above a softly patterned upper storey, while the glazed ground floor opens onto a generous forecourt with visitor parking.',
