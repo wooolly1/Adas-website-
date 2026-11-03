@@ -122,7 +122,7 @@ async function graphToken() {
   return appToken.value;
 }
 
-async function graph(method, path, body) {
+async function graph(method, path, body, missing) {
   const base = `https://graph.microsoft.com/v1.0${env('ATT_DRIVE')}/root:/${encodeURI(env('ATT_WORKBOOK_PATH'))}:/workbook`;
   const r = await fetch(base + path, {
     method,
@@ -130,6 +130,7 @@ async function graph(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!r.ok) {
+    if (missing && r.status === 404) throw new HttpError(503, missing);
     const detail = await r.text().catch(() => '');
     console.error('Graph', method, path, r.status, detail.slice(0, 500));
     throw new HttpError(502, 'Could not reach the attendance workbook. Please try again.');
@@ -150,14 +151,26 @@ function cellTime(v) {
   return String(v || '').trim();
 }
 
-const tableRows = async (table) => ((await graph('GET', `/tables/${table}/rows`)).value || []).map((r) => r.values[0]);
+const tableRows = async (table, missing) => ((await graph('GET', `/tables/${table}/rows`, null, missing)).value || []).map((r) => r.values[0]);
 
 async function staffMember(email) {
   const row = (await tableRows('Staff')).find((r) => String(r[0]).trim().toLowerCase() === email);
   if (!row) return null;
   const active = String(row[2]).trim().toUpperCase();
   if (['FALSE', 'NO', '0'].includes(active)) return null;
-  return { email, name: String(row[1] || '').trim() };
+  return staffFrom(row);
+}
+
+/* Staff columns: Email | Name | Active | Role (optional, "Manager") | Annual Days (optional) */
+function staffFrom(row) {
+  const days = Number(row[4]);
+  return {
+    email: String(row[0]).trim().toLowerCase(),
+    name: String(row[1] || '').trim(),
+    active: !['FALSE', 'NO', '0'].includes(String(row[2]).trim().toUpperCase()),
+    manager: /^(manager|admin|hr)$/i.test(String(row[3] || '').trim()),
+    allowance: Number.isFinite(days) && days > 0 ? days : Number(env('ANNUAL_LEAVE_DAYS', '22')),
+  };
 }
 
 async function todayRecord(email) {
@@ -217,6 +230,134 @@ function checkPlace(b) {
   return { distance, accuracy: Math.round(acc), lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) };
 }
 
+
+/* ----------------------------------------------------------- annual leave */
+/* Leave table columns: ID | Requested | Email | Name | Start | End | Days | Note | Status | Decided By | Decided At */
+const LEAVE_COLUMNS = 11;
+const LEAVE_MISSING = 'Annual leave is not set up yet. Please ask the admin to add the "Leave" table to the workbook.';
+const isoDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
+
+/** Working days (Sun–Thu) from start to end inclusive. */
+function workingDays(start, end) {
+  let n = 0;
+  for (let d = new Date(start + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const w = d.getUTCDay();
+    if (w !== 5 && w !== 6) n++;
+  }
+  return n;
+}
+
+function leaveFrom(row, index) {
+  return {
+    index, id: String(row[0]), requested: String(row[1] || ''), email: String(row[2]).trim().toLowerCase(),
+    name: String(row[3] || ''), start: cellDay(row[4]), end: cellDay(row[5]), days: Number(row[6]) || 0,
+    note: String(row[7] || ''), status: String(row[8] || 'Pending').trim() || 'Pending',
+    decidedBy: String(row[9] || ''), decidedAt: String(row[10] || ''),
+  };
+}
+const leaveRow = (l) => [l.id, l.requested, l.email, l.name, l.start, l.end, l.days, l.note, l.status, l.decidedBy, l.decidedAt];
+const publicLeave = ({ index, ...l }) => l;
+
+async function allLeave() {
+  return (await tableRows('Leave', LEAVE_MISSING)).map(leaveFrom);
+}
+
+function balanceFor(staff, leave, year) {
+  const mine = leave.filter((l) => l.email === staff.email && l.start.slice(0, 4) === String(year));
+  const used = mine.filter((l) => /^approved$/i.test(l.status)).reduce((a, l) => a + l.days, 0);
+  const pending = mine.filter((l) => /^pending$/i.test(l.status)).reduce((a, l) => a + l.days, 0);
+  return { year, allowance: staff.allowance, used, pending, remaining: staff.allowance - used - pending };
+}
+
+/** Best-effort email via Microsoft Graph (needs MAIL_FROM + Mail.Send). Never blocks the request. */
+async function notify(to, subject, text) {
+  const from = env('MAIL_FROM');
+  if (!from || !to.length) return;
+  try {
+    await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from)}/sendMail`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await graphToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: { subject, body: { contentType: 'Text', content: text },
+        toRecipients: to.map((address) => ({ emailAddress: { address } })) }, saveToSentItems: false }),
+    });
+  } catch (e) { console.warn('leave email not sent:', e.message); }
+}
+
+async function handleLeave(b, staff, name) {
+  const year = Number(riyadh().day.slice(0, 4));
+  const leave = await allLeave();
+  const view = async () => {
+    const mine = leave.filter((l) => l.email === staff.email).sort((x, y) => y.start.localeCompare(x.start)).map(publicLeave);
+    const out = { ok: true, manager: staff.manager, balance: balanceFor(staff, leave, year), requests: mine };
+    if (staff.manager) {
+      const team = (await tableRows('Staff')).map(staffFrom).filter((s) => s.active);
+      const byEmail = Object.fromEntries(team.map((s) => [s.email, s]));
+      out.pending = leave.filter((l) => /^pending$/i.test(l.status)).sort((x, y) => x.start.localeCompare(y.start))
+        .map((l) => ({ ...publicLeave(l), remaining: byEmail[l.email] ? balanceFor(byEmail[l.email], leave, Number(l.start.slice(0, 4))).remaining + l.days : null }));
+      out.team = team.map((s) => ({ name: s.name, email: s.email, ...balanceFor(s, leave, year) }));
+    }
+    return out;
+  };
+
+  if (b.action === 'leaveStatus') return view();
+
+  if (b.action === 'leaveRequest') {
+    const start = String(b.start || ''), end = String(b.end || ''), note = String(b.note || '').slice(0, 300);
+    if (!isoDay(start) || !isoDay(end)) throw new HttpError(400, 'Please choose a start and end date.');
+    if (end < start) throw new HttpError(400, 'The end date is before the start date.');
+    if (start < riyadh().day) throw new HttpError(400, 'Leave can only be requested from today onwards.');
+    if (start.slice(0, 4) !== end.slice(0, 4)) throw new HttpError(400, 'Please split leave that crosses the new year into two requests.');
+    const days = workingDays(start, end);
+    if (days === 0) throw new HttpError(400, 'Those dates are only Fridays/Saturdays — no working days to request.');
+    const clash = leave.find((l) => l.email === staff.email && /^(pending|approved)$/i.test(l.status) && l.start <= end && start <= l.end);
+    if (clash) throw new HttpError(409, `You already have a ${clash.status.toLowerCase()} request for ${clash.start} — ${clash.end}.`);
+    const bal = balanceFor(staff, leave, Number(start.slice(0, 4)));
+    if (days > bal.remaining) throw new HttpError(400, `That is ${days} working days, but you have ${bal.remaining} left for ${bal.year}.`);
+    const { day, time } = riyadh();
+    const l = { id: 'L' + Date.now().toString(36).toUpperCase(), requested: `${day} ${time}`, email: staff.email, name,
+      start, end, days, note, status: 'Pending', decidedBy: '', decidedAt: '' };
+    await graph('POST', '/tables/Leave/rows', { values: [leaveRow(l)] }, LEAVE_MISSING);
+    leave.push({ ...l, index: leave.length });
+    const managers = (await tableRows('Staff')).map(staffFrom).filter((s) => s.active && s.manager && s.email !== staff.email).map((s) => s.email);
+    await notify(managers, `Leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
+      `${name} requested annual leave from ${start} to ${end} (${days} working day${days === 1 ? '' : 's'}).\n${note ? 'Note: ' + note + '\n' : ''}\nReview it at https://adas.com.sa/#/team`);
+    return view();
+  }
+
+  const find = () => {
+    const l = leave.find((x) => x.id === String(b.id || ''));
+    if (!l) throw new HttpError(404, 'That request was not found. Please refresh.');
+    return l;
+  };
+  const save = async (l) => graph('PATCH', `/tables/Leave/rows/itemAt(index=${l.index})`, { values: [leaveRow(l).slice(0, LEAVE_COLUMNS)] }, LEAVE_MISSING);
+
+  if (b.action === 'leaveCancel') {
+    const l = find();
+    if (l.email !== staff.email) throw new HttpError(403, 'You can only cancel your own requests.');
+    if (!/^pending$/i.test(l.status)) throw new HttpError(409, 'Only pending requests can be cancelled. Ask your manager to change an approved one.');
+    const { day, time } = riyadh();
+    Object.assign(l, { status: 'Cancelled', decidedBy: staff.email, decidedAt: `${day} ${time}` });
+    await save(l);
+    return view();
+  }
+
+  if (b.action === 'leaveDecide') {
+    if (!staff.manager) throw new HttpError(403, 'Only managers can approve leave.');
+    const l = find();
+    if (l.email === staff.email) throw new HttpError(403, 'Another manager needs to decide on your own request.');
+    if (!/^pending$/i.test(l.status)) throw new HttpError(409, `This request is already ${l.status.toLowerCase()}.`);
+    const approve = b.decision === 'approve';
+    const { day, time } = riyadh();
+    Object.assign(l, { status: approve ? 'Approved' : 'Rejected', decidedBy: name, decidedAt: `${day} ${time}` });
+    await save(l);
+    await notify([l.email], `Your leave request was ${approve ? 'approved' : 'not approved'}`,
+      `Your annual leave ${l.start} to ${l.end} (${l.days} working day${l.days === 1 ? '' : 's'}) was ${approve ? 'approved' : 'not approved'} by ${name}.\n\nSee your balance at https://adas.com.sa/#/team`);
+    return view();
+  }
+
+  throw new HttpError(400, 'Unknown action.');
+}
+
 /* --------------------------------------------------------------- handler */
 
 module.exports = async function handler(req, res) {
@@ -258,6 +399,10 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, today: summary({ row }) });
     }
 
+    if (String(b.action || '').startsWith('leave')) {
+      return res.status(200).json(await handleLeave(b, staff, name));
+    }
+
     throw new HttpError(400, 'Unknown action.');
   } catch (err) {
     const status = err.status || 500;
@@ -267,4 +412,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = { maxDuration: 15 };
-module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation };
+module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom };

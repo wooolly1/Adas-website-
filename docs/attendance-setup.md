@@ -26,6 +26,17 @@ website's **Vercel** project. Time: about 20 minutes.
 
    Add one row per team member. Set `Active` to `FALSE` to block someone without deleting
    their history.
+
+   For **annual leave**, add two more columns to the right of `Active` (click inside the
+   table and type in the next column so the table grows):
+
+   | Email | Name | Active | Role | Annual Days |
+   |---|---|---|---|---|
+   | kareem@adas.com.sa | Abdulkareem | TRUE | Manager | |
+   | sara@adas.com.sa | Sara | TRUE | | 30 |
+
+   - `Role` = **Manager** lets that person approve or decline leave. Leave it blank for everyone else.
+   - `Annual Days` is optional: blank means the default **22 days** a year.
 3. **Sheet "Attendance"** — headers in row 1, then *Insert → Table*, name it
    **`Attendance`** (exactly). The 14 columns, in this order:
 
@@ -35,7 +46,16 @@ website's **Vercel** project. Time: about 20 minutes.
 
    Tip: select the `Date`, `Check In` and `Check Out` columns and set *Number format →
    Text* so Excel keeps them exactly as written. (The website copes either way.)
-4. Leave the Attendance table empty — the website adds the rows. Don't rename the tables
+4. **Sheet "Leave"** (for annual leave) — headers in row 1, *Insert → Table*, name it
+   **`Leave`** (exactly). The 11 columns, in this order:
+
+   `ID` · `Requested` · `Email` · `Name` · `Start` · `End` · `Days` · `Note` · `Status` ·
+   `Decided By` · `Decided At`
+
+   Set `Start` and `End` to *Number format → Text* as well. The website adds and updates
+   these rows; `Status` is Pending, Approved, Rejected or Cancelled. To correct an approved
+   request, edit its `Status` or `Days` cell directly.
+5. Leave the Attendance table empty — the website adds the rows. Don't rename the tables
    or move the columns. You can add your own sheets, pivot tables and charts freely.
 
 ## 2. Register the app in Microsoft Entra
@@ -59,6 +79,10 @@ website's **Vercel** project. Time: about 20 minutes.
    a dedicated SharePoint site and use the `Sites.Selected` permission instead, granted
    only to that site. Then use the `/sites/<site-id>/drive` form in step 3.
 
+**Optional — leave emails.** To email managers about new requests and staff about decisions,
+also add the Graph *application* permission **`Mail.Send`** (grant admin consent) and set
+`MAIL_FROM` below. Without it, leave still works; people just check the Team page.
+
 ## 3. Add the settings to Vercel
 
 Vercel → the website project → **Settings → Environment Variables** → add each one for
@@ -75,6 +99,8 @@ Vercel → the website project → **Settings → Environment Variables** → ad
 | `OFFICE_LNG` | office longitude, e.g. `39.1xxxxx` |
 | `RADIUS_M` | allowed distance in metres, e.g. `150` |
 | `ALLOWED_DOMAIN` | `adas.com.sa` |
+| `ANNUAL_LEAVE_DAYS` | optional, default `22` |
+| `MAIL_FROM` | optional: a mailbox such as `office@adas.com.sa` to send leave emails from |
 
 Office coordinates: in Google Maps, right-click exactly on the office building — the first
 line of the menu is `latitude, longitude`.
