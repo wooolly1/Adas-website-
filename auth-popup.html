@@ -5,10 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>Signing in…</title>
-    <style>body{margin:0;display:grid;place-items:center;height:100vh;background:#fbf6ec;color:#231f20;font:14px system-ui,sans-serif}</style>
+    <style>
+      body{margin:0;display:grid;place-items:center;min-height:100vh;background:#fbf6ec;color:#231f20;font:15px/1.5 system-ui,-apple-system,sans-serif;text-align:center;padding:0 24px}
+      a{color:#557722}
+    </style>
   </head>
   <body>
-    <!-- Microsoft sign-in returns here inside the pop-up; the main page reads the result and closes it. -->
-    <p>Signing in…</p>
+    <!-- Microsoft sign-in returns here (full-page redirect). We store the
+         session with MSAL, then go back to the Team page. The file name is
+         kept so the redirect URI registered in Entra stays the same. -->
+    <p id="msg">Signing in…</p>
+    <script type="module">
+      import { PublicClientApplication } from 'https://esm.sh/@azure/msal-browser@3.27.0';
+      // Same IDs as MS_CLIENT_ID / MS_TENANT_ID in app.jsx (public values).
+      const CLIENT_ID = 'adbb71da-fe2d-4489-8275-331bb4500b81';
+      const TENANT_ID = '08d435b8-9026-497b-9491-1c4532c20d3f';
+      const back = () => location.replace('/#/team');
+      try {
+        const app = new PublicClientApplication({
+          auth: {
+            clientId: CLIENT_ID,
+            authority: `https://login.microsoftonline.com/${TENANT_ID}`,
+            redirectUri: `${location.origin}/auth-popup.html`,
+            navigateToLoginRequestUrl: false,
+          },
+          cache: { cacheLocation: 'localStorage' },
+        });
+        await app.initialize();
+        const r = await app.handleRedirectPromise();
+        if (r && r.account) app.setActiveAccount(r.account);
+        back();
+      } catch (e) {
+        try { sessionStorage.setItem('adas_att_error', (e && (e.errorMessage || e.message)) || 'Microsoft sign-in failed.'); } catch (_) {}
+        back();
+      }
+    </script>
+    <noscript>Please enable JavaScript, then <a href="/#/team">go back to the Team page</a>.</noscript>
   </body>
 </html>
