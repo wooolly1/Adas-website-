@@ -2372,7 +2372,7 @@ function ContactPage() {
                 <span className="flex items-center justify-between gap-3 font-display text-2xl transition group-hover:text-gold-600">
                   +966 55 859 3937<span className="text-lg text-gold-600 transition group-hover:translate-x-1" aria-hidden="true">→</span>
                 </span>
-                <span className="mt-1 block stamp text-ink-700/50">WHATSAPP · 09 — 17 GMT+3 · TAP TO CHAT</span>
+                <span className="mt-1 block stamp text-ink-700/50">WHATSAPP · 09 — 18 GMT+3 · TAP TO CHAT</span>
               </a>
               <a href={CONTACT.maps} target="_blank" rel="noopener noreferrer" className="group mt-6 block border-t border-ink-900/10 pt-6">
                 <span className="flex items-center justify-between gap-3 font-display text-2xl transition group-hover:text-gold-600">
@@ -2688,7 +2688,7 @@ function MiniCalendar({ value, onPick }) {
 
   const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const isPast = (d) => d < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const isFri = (d) => d.getDay() === 5;
+  const isClosed = (d) => d.getDay() === 5 || d.getDay() === 6; // Fri, Sat
   const monthLabel = view.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
   return (
@@ -2707,7 +2707,7 @@ function MiniCalendar({ value, onPick }) {
         {cells.map((d, i) => {
           if (!d) return <span key={i} className="aspect-square" />;
           const dStr = fmt(d);
-          const disabled = isPast(d) || isFri(d);
+          const disabled = isPast(d) || isClosed(d);
           const picked = value === dStr;
           return (
             <button key={i}
@@ -2993,7 +2993,7 @@ function BookPage() {
                     <p className="mt-2 text-sm text-ink-800/70">
                       {isRevit
                         ? 'Courses run Sat — Thu, 17:00 — 21:00 · 3-hour sessions per day · Fridays closed.'
-                        : 'Sat — Thu, 17:00 — 21:00 · Fridays closed.'}
+                        : 'Sun — Thu, 17:00 — 21:00 · Fridays and Saturdays closed.'}
                     </p>
 
                     {/* Engineer picker */}
