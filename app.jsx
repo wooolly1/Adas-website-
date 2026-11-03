@@ -557,8 +557,10 @@ function useTransparentLogo(srcPath = './logo.jpg', threshold = 235) {
   return pair;
 }
 
-function Logo({ className = '', dark = false }) {
+function Logo({ className = '', dark: darkProp = false }) {
   const pair = useTransparentLogo();
+  const { theme } = useTheme();
+  const dark = darkProp && theme !== 'dark'; // dark strokes only on light backgrounds
   // Fallback: use raw jpg until processed
   const src = pair ? (dark ? pair.dark : pair.light) : './logo.jpg';
   return (
@@ -713,8 +715,8 @@ function MobileMenu({ open, onClose }) {
               <button onClick={onClose} aria-label="Close"
                 className="grid h-10 w-10 place-items-center rounded-full border border-ink-900/15 text-ink-900">
                 <span className="relative block h-4 w-4">
-                  <span className="absolute inset-x-0 top-1/2 h-px rotate-45 bg-bone-50" />
-                  <span className="absolute inset-x-0 top-1/2 h-px -rotate-45 bg-bone-50" />
+                  <span className="absolute inset-x-0 top-1/2 h-px rotate-45 bg-current" />
+                  <span className="absolute inset-x-0 top-1/2 h-px -rotate-45 bg-current" />
                 </span>
               </button>
             </div>
