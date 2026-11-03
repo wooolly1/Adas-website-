@@ -296,14 +296,12 @@ const TEAM = [
   { name: 'Walaa Adas', role: 'Board Member · CMO',
     bio: 'Leads the studio\'s brand, client experience and creative direction — shaping how ADAS is read inside and outside Saudi Arabia.',
     icon: true, gender: 'f' },
-  { name: 'Raneem Sobahi', role: 'Executive Secretary',
-    bio: 'The diary, the desk and the door — keeps every conversation, project file and client visit moving without friction.',
-    icon: true, gender: 'f' },
 ];
 
 const DESIGN_TEAM = [
   { name: 'Wijdan Ashqar', role: 'Interior Designer', gender: 'f' },
   { name: 'Amani Al Hameed', role: 'Interior Designer', gender: 'f' },
+  { name: 'Renad Al Gain', role: 'Architect', gender: 'f' },
   { name: 'Tamem Saeedi', role: 'Architect', gender: 'm' },
   { name: 'E H', role: 'Structural Engineering Lead', gender: 'm' },
   { name: 'M Q', role: 'Electrical Engineering Lead', gender: 'm' },
@@ -1621,7 +1619,7 @@ function TeamSection() {
             </Reveal>
           </div>
         </div>
-        <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mx-auto mt-14 grid max-w-[1080px] grid-cols-1 gap-6 sm:grid-cols-3">
           {TEAM.map((m, i) => (
             <Reveal key={m.name} delay={i * 0.08}>
               <div className="group relative overflow-hidden rounded-2xl border border-ink-900/10 bg-white">
@@ -1659,7 +1657,7 @@ function TeamSection() {
               The people <span className="font-titling not-italic font-medium text-gold-500">at the drawing boards</span>.
             </h3>
           </Reveal>
-          <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {DESIGN_TEAM.map((m, i) => (
               <Reveal key={m.name} delay={(i % 6) * 0.06}>
                 <div className="group flex h-full flex-col items-center rounded-2xl border border-ink-900/10 bg-white p-5 text-center transition hover:border-gold-400/50 hover:shadow-soft">
