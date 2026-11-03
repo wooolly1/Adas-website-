@@ -3406,6 +3406,7 @@ function TeamPage() {
 
   const today = me && me.today ? me.today : {};
   const btn = 'magnetic-btn inline-flex w-full items-center justify-center gap-3 rounded-full px-7 py-4 text-[12px] uppercase tracking-widest-2 transition disabled:cursor-not-allowed disabled:opacity-40';
+  const btnPair = 'magnetic-btn inline-flex w-full items-center justify-center whitespace-nowrap rounded-full px-3 py-4 text-[12px] uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-40';
 
   return (
     <>
@@ -3451,21 +3452,21 @@ function TeamPage() {
                 </div>
                 {today.hours && <p className="mt-3 text-sm text-ink-800/70">Today: {today.hours} hours</p>}
 
-                <div className="mt-8 space-y-3">
-                  {!today.checkIn && (
-                    <button onClick={() => punch('checkIn')} disabled={!!busy} className={btn + ' bg-gold-400 text-ink-950 hover:bg-gold-300'}>
-                      {busy === 'checkIn' ? 'Checking your location…' : 'Check in'}
+                {today.checkIn && today.checkOut ? (
+                  <p className="mt-8 rounded-2xl bg-gold-400/10 p-4 text-center text-sm text-ink-800">You're done for today.</p>
+                ) : (
+                  <div className="mt-8 grid grid-cols-2 gap-3">
+                    <button onClick={() => punch('checkIn')} disabled={!!busy || !!today.checkIn}
+                      className={btnPair + ' bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+                      {busy === 'checkIn' ? 'Locating…' : 'Check in'}
                     </button>
-                  )}
-                  {today.checkIn && !today.checkOut && (
-                    <button onClick={() => punch('checkOut')} disabled={!!busy} className={btn + ' bg-ink-900 text-bone-100 hover:bg-ink-800'}>
-                      {busy === 'checkOut' ? 'Checking your location…' : 'Check out'}
+                    <button onClick={() => punch('checkOut')} disabled={!!busy || !today.checkIn}
+                      className={btnPair + ' bg-ink-900 text-bone-100 hover:bg-ink-800'}>
+                      {busy === 'checkOut' ? 'Locating…' : 'Check out'}
                     </button>
-                  )}
-                  {today.checkIn && today.checkOut && (
-                    <p className="rounded-2xl bg-gold-400/10 p-4 text-center text-sm text-ink-800">You're done for today.</p>
-                  )}
-                </div>
+                  </div>
+                )}
+                {!today.checkIn && <p className="mt-3 text-center text-xs text-ink-700/60">Check out unlocks after you check in.</p>}
                 <button onClick={signOut} className="stamp mt-8 w-full text-center text-ink-700/60 hover:text-gold-600">Sign out</button>
               </div>
             )}

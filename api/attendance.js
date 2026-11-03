@@ -22,8 +22,8 @@
  *                         /users/admin@adas.com.sa/drive     (OneDrive)
  *                         /sites/<site-id>/drive             (SharePoint)
  *   ATT_WORKBOOK_PATH   Path inside that drive, e.g. Attendance/ADAS Attendance.xlsx
- *   OFFICE_LAT          Office latitude,  e.g. 21.7xxxxx
- *   OFFICE_LNG          Office longitude, e.g. 39.1xxxxx
+ *   OFFICE_LAT          Office latitude  (default 21.723028, ADAS office)
+ *   OFFICE_LNG          Office longitude (default 39.134389, ADAS office)
  *   RADIUS_M            Allowed distance in metres (default 150)
  *   ALLOWED_DOMAIN      Email domain allowed to sign in (default adas.com.sa)
  *
@@ -179,7 +179,8 @@ const summary = (rec) => (rec
 
 function checkPlace(b) {
   const lat = Number(b.lat), lng = Number(b.lng), acc = Number(b.accuracy);
-  const oLat = Number(env('OFFICE_LAT')), oLng = Number(env('OFFICE_LNG'));
+  // ADAS office, Jeddah (21°43'22.9"N 39°08'03.8"E); Vercel env vars override.
+  const oLat = Number(env('OFFICE_LAT', '21.723028')), oLng = Number(env('OFFICE_LNG', '39.134389'));
   const radius = Number(env('RADIUS_M', '150'));
   if (!oLat || !oLng) throw new HttpError(500, 'Office location is not set up yet. Please tell the admin.');
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new HttpError(400, 'Location is missing. Please allow location access and try again.');
