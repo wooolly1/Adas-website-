@@ -468,7 +468,7 @@ function LoadingScreen({ onDone }) {
         </svg>
 
         <div className="mt-10 flex w-full items-center justify-between stamp text-ink-800/80">
-          <span>ADAS · ARCHITECTURE STUDIO</span>
+          <span>ADAS · ARCHITECTURE</span>
           <span>EST · MMXIV</span>
         </div>
         <div className="mt-3 h-px w-full overflow-hidden bg-ink-900/15">
@@ -555,7 +555,7 @@ function Logo({ className = '', dark = false }) {
         style={{ background: 'transparent' }}
       />
       <span className="hidden flex-col gap-[2px] leading-none sm:flex">
-        <span className="stamp text-[8px] tracking-[0.28em]">Architecture Studio</span>
+        <span className="stamp text-[8px] tracking-[0.28em]">ADAS Architecture</span>
         <span className="stamp text-[7px] tracking-[0.22em] text-lilac-500/80">Jeddah · KSA</span>
       </span>
     </Link>
@@ -592,24 +592,66 @@ function ThemeToggle() {
   );
 }
 
+/* Is the page behind (x, y) dark? Ignores the header itself and anything
+ * with pointer-events:none (cursor, particles, grids). Photos count as dark. */
+function isDarkBehind(x, y, ignore) {
+  const stack = document.elementsFromPoint(x, y);
+  for (const el of stack) {
+    if (ignore && ignore.contains(el)) continue;
+    const tag = el.tagName;
+    if (tag === 'IMG' || tag === 'VIDEO' || tag === 'CANVAS') return true;
+    const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+    if (!m) continue;
+    const [r, g, b, a = 1] = m.map(Number);
+    if (a < 0.4) continue;
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+  }
+  return document.documentElement.classList.contains('dark');
+}
+
 function Navbar({ onOpenMenu }) {
   const { scrollY } = useScroll();
   const [scrolled, setScrolled] = useState(false);
   const { path } = useContext(RouterCtx);
-  const overHero = path === '/' && !scrolled;
+  const { theme } = useTheme();
+  const headerRef = useRef(null);
+  const logoRef = useRef(null);
+  const [bgDark, setBgDark] = useState(path === '/');
   useEffect(() => {
     const unsub = scrollY.on('change', (v) => setScrolled(v > 30));
     return () => unsub();
   }, [scrollY]);
+  /* re-check the colour behind the logo on scroll, resize, route and theme change */
+  useEffect(() => {
+    let raf = 0;
+    const check = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = logoRef.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        setBgDark(isDarkBehind(r.left + r.width / 2, r.top + r.height / 2, headerRef.current));
+      });
+    };
+    check();
+    // re-check after the loading screen, page transitions and late images
+    const timers = [400, 1200, 2500, 4500].map((ms) => setTimeout(check, ms));
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => { timers.forEach(clearTimeout); cancelAnimationFrame(raf); window.removeEventListener('scroll', check); window.removeEventListener('resize', check); };
+  }, [path, theme]);
+  /* once scrolled the header sits on its own glass pill, which follows the theme */
+  const onDark = scrolled ? theme === 'dark' : bgDark;
+  const overHero = onDark;
 
   return (
-    <motion.header initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+    <motion.header ref={headerRef} initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.9, ease: [0.77, 0, 0.18, 1], delay: 0.1 }}
       className={'fixed inset-x-0 top-0 z-[80] transition-all duration-500 ' + (scrolled ? 'py-3' : 'py-6')}>
       <div className="mx-auto flex w-[min(1500px,94vw)] items-center justify-between">
-        <div className={'flex items-center gap-4 rounded-full px-4 py-2 transition-all duration-500 ' +
-          (scrolled ? 'glass shadow-soft text-ink-900' : 'bg-transparent text-white')}>
-          <Logo dark={scrolled} />
+        <div ref={logoRef} className={'flex items-center gap-4 rounded-full px-4 py-2 transition-all duration-500 ' +
+          (scrolled ? 'glass shadow-soft ' : 'bg-transparent ') + (onDark ? 'text-white' : 'text-ink-900')}>
+          <Logo dark={!onDark} />
         </div>
         <nav className={'hidden items-center gap-1 rounded-full px-2 py-1.5 transition-all duration-500 md:flex ' +
           (scrolled ? 'glass shadow-soft' : 'bg-transparent')}>
@@ -631,7 +673,7 @@ function Navbar({ onOpenMenu }) {
           </Link>
           <ThemeToggle />
           <button aria-label="Menu" onClick={onOpenMenu}
-            className={'glass grid h-10 w-10 place-items-center rounded-full md:hidden ' + (scrolled ? 'text-ink-900' : 'text-white')}>
+            className={'glass grid h-10 w-10 place-items-center rounded-full md:hidden ' + (onDark ? 'text-white' : 'text-ink-900')}>
             <span className="flex flex-col gap-1">
               <span className="block h-px w-4 bg-current" />
               <span className="block h-px w-4 bg-current" />
