@@ -1196,15 +1196,16 @@ function FeaturedSlider() {
 function BlueprintSection() {
   const [hover, setHover] = useState(null);
   const [picked, setPicked] = useState(null);
+  /* Real rooms from Yousif's Palace (Interior Design → Residential) */
   const rooms = [
-    { id: 'a', label: 'Atrium',  x: 16, y: 18, w: 40, h: 28, info: 'Atrium · 220 m² · 9.6m clear height · north-lit',
-      photo: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=900&q=80' },
-    { id: 'b', label: 'Library', x: 60, y: 18, w: 28, h: 28, info: 'Library · 96 m² · oak millwork · 4,200 volumes',
-      photo: 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=900&q=80' },
-    { id: 'c', label: 'Salon',   x: 16, y: 50, w: 28, h: 28, info: 'Salon · 88 m² · fluted plaster · concealed AV',
-      photo: 'https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=900&q=80' },
-    { id: 'd', label: 'Garden',  x: 48, y: 50, w: 40, h: 28, info: 'Garden Court · 160 m² · monolithic basalt floor',
-      photo: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=900&q=80' },
+    { id: 'a', label: 'Majlis',  x: 16, y: 18, w: 40, h: 28, info: "Majlis · carved geometric lattice arches · crystal chandeliers",
+      photo: './projects/private-palace-1/interior/01.webp' },
+    { id: 'b', label: 'Entrance', x: 60, y: 18, w: 28, h: 28, info: 'Entrance hall · double height · arched stained-glass windows',
+      photo: './projects/private-palace-1/interior/03.webp' },
+    { id: 'c', label: 'Master suite', x: 16, y: 50, w: 28, h: 28, info: 'Master suite · tufted headboard · panelled walls',
+      photo: './projects/private-palace-1/interior/13.webp' },
+    { id: 'd', label: 'Dining',  x: 48, y: 50, w: 40, h: 28, info: 'Formal dining · seats twenty · sculpted brass chandelier',
+      photo: './projects/private-palace-1/interior/04.webp' },
   ];
   return (
     <section className="relative overflow-hidden bg-bone-100/40 py-14 md:py-24">
@@ -1217,7 +1218,7 @@ function BlueprintSection() {
             </h2>
           </Reveal>
           <p className="mt-4 max-w-md text-sm text-ink-800/70 md:mt-6 md:text-base">
-            Tap a room to see it in the real world.
+            Tap a room to see it as we designed it — Yousif's Palace, Jeddah.
           </p>
           <div className="mt-8 space-y-3">
             {rooms.map((r) => (
@@ -1242,7 +1243,7 @@ function BlueprintSection() {
                         <PrettyImg src={r.photo} alt={r.label} className="h-full w-full" />
                         <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-gold-400/30" />
                         <div className="absolute bottom-2 left-2 stamp rounded bg-ink-900/70 px-2 py-1 text-white">
-                          {r.label.toUpperCase()} · IN SITU
+                          {r.label.toUpperCase()} · YOUSIF'S PALACE
                         </div>
                       </div>
                     </motion.div>
@@ -1251,6 +1252,9 @@ function BlueprintSection() {
               </div>
             ))}
           </div>
+          <Link to="/projects" className="mt-6 inline-flex items-center gap-2 stamp text-gold-600 transition hover:text-gold-500">
+            See the full project →
+          </Link>
         </div>
         <div className="relative col-span-12 lg:col-span-8">
           <div className="relative aspect-[5/4] w-full overflow-hidden rounded-2xl border border-gold-400/20 bg-white">
