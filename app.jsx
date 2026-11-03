@@ -755,6 +755,8 @@ const CONTACT = {
   maps: 'https://www.google.com/maps/search/?api=1&query=21.723028%2C39.134389',
 };
 
+const MAP_PIN = 'M12 0C7.3 0 3.5 3.8 3.5 8.5 3.5 14.9 12 24 12 24s8.5-9.1 8.5-15.5C20.5 3.8 16.7 0 12 0zm0 12.3a3.8 3.8 0 1 1 0-7.6 3.8 3.8 0 0 1 0 7.6z';
+
 /* Footer social links (simple-icons glyphs, 24×24) */
 const SOCIALS = [
   { label: 'Instagram', href: 'https://www.instagram.com/adasarchitect',
@@ -2383,15 +2385,11 @@ function ContactPage() {
             <div className="glass rounded-2xl p-8">
               <p className="stamp text-gold-300">— FOLLOW US</p>
               <div className="mt-5 grid grid-cols-3 gap-3">
-                {[
-                  { l: 'WhatsApp', h: '+966 55 859 3937' }, { l: 'Instagram', h: '@adasarchitect' },
-                  { l: 'LinkedIn', h: '/adas-gabson' }, { l: 'Snapchat', h: '@adasgarchitect' },
-                  { l: 'X', h: '@Adasarchitect' }, { l: 'Maps', h: 'View on Google' },
-                ].map((s) => (
-                  <a href={s.l === 'Maps' ? CONTACT.maps : (SOCIALS.find((x) => x.label === s.l) || {}).href} target="_blank" rel="noopener noreferrer" key={s.l}
-                    className="group flex flex-col items-start rounded-xl border border-ink-900/10 p-3 transition hover:border-gold-300">
-                    <span className="stamp text-ink-700/50 group-hover:text-gold-300">{s.l}</span>
-                    <span className="mt-1 text-sm text-ink-900">{s.h}</span>
+                {[...SOCIALS, { label: 'Maps', href: CONTACT.maps, path: MAP_PIN }].map((s) => (
+                  <a key={s.label} href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} title={s.label}
+                    className="group flex flex-col items-center justify-center gap-2 rounded-xl border border-ink-900/10 py-5 text-ink-800 transition hover:-translate-y-0.5 hover:border-gold-400 hover:text-gold-600">
+                    <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor" aria-hidden="true"><path d={s.path} /></svg>
+                    <span className="stamp text-[9px] text-ink-700/50 transition group-hover:text-gold-600">{s.label}</span>
                   </a>
                 ))}
               </div>
