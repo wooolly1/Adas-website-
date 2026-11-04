@@ -133,7 +133,12 @@ async function graph(method, path, body, missing) {
     if (missing && r.status === 404) throw new HttpError(503, missing);
     const detail = await r.text().catch(() => '');
     console.error('Graph', method, path, r.status, detail.slice(0, 500));
-    throw new HttpError(502, 'Could not reach the attendance workbook. Please try again.');
+    let reason = '';
+    try { const e = JSON.parse(detail).error || {}; reason = [e.code, e.message].filter(Boolean).join(': ').slice(0, 160); } catch (_) { /* not JSON */ }
+    if (r.status === 423 || /lock|EditModeCannotAcquireLock/i.test(detail)) {
+      throw new HttpError(503, 'The workbook is busy (it may be open in desktop Excel). Close it or use Excel Online, then try again.');
+    }
+    throw new HttpError(502, 'Could not save to the attendance workbook. Please try again.' + (reason ? ` (${reason})` : ''));
   }
   return r.status === 204 ? null : r.json();
 }
@@ -232,8 +237,35 @@ function checkPlace(b) {
 
 
 /* ----------------------------------------------------------- annual leave */
-/* Leave table columns: ID | Requested | Email | Name | Start | End | Days | Note | Status | Decided By | Decided At */
-const LEAVE_COLUMNS = 11;
+/* Leave table columns (matched by header name, any order; extra columns are kept):
+ * ID | Requested | Email | Name | Start | End | Days | Note | Status | Decided By | Decided At */
+const LEAVE_FIELDS = {
+  id: ['id', 'requestid'], requested: ['requested', 'requestedat', 'date', 'created'], email: ['email', 'emailaddress'],
+  name: ['name', 'employee', 'staff'], start: ['start', 'startdate', 'from'], end: ['end', 'enddate', 'to'],
+  days: ['days', 'workingdays', 'noofdays'], note: ['note', 'notes', 'reason', 'comment'], status: ['status'],
+  decidedBy: ['decidedby', 'approvedby', 'manager'], decidedAt: ['decidedat', 'decisiondate', 'approvedat'],
+};
+const LEAVE_REQUIRED = ['id', 'email', 'start', 'end', 'days', 'status'];
+const LEAVE_LABEL = { id: 'ID', requested: 'Requested', email: 'Email', name: 'Name', start: 'Start', end: 'End', days: 'Days',
+  note: 'Note', status: 'Status', decidedBy: 'Decided By', decidedAt: 'Decided At' };
+const normHeader = (h) => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Reads the Leave table's header row and maps each field to its column position. */
+async function leaveLayout() {
+  const cols = ((await graph('GET', '/tables/Leave/columns?$select=name', null, LEAVE_MISSING)).value || []).map((c) => c.name);
+  const norm = cols.map(normHeader);
+  const pos = {};
+  for (const [field, names] of Object.entries(LEAVE_FIELDS)) {
+    const i = norm.findIndex((h) => names.includes(h));
+    if (i >= 0) pos[field] = i;
+  }
+  const missing = LEAVE_REQUIRED.filter((f) => pos[f] == null);
+  if (missing.length) {
+    throw new HttpError(503, `The Leave table is missing column${missing.length > 1 ? 's' : ''}: ${missing.map((f) => LEAVE_LABEL[f]).join(', ')}. `
+      + `Its headers are: ${cols.join(', ') || '(none)'}. Please ask the admin to add ${missing.length > 1 ? 'them' : 'it'}.`);
+  }
+  return { width: cols.length, pos };
+}
 const LEAVE_MISSING = 'Annual leave is not set up yet. Please ask the admin to add the "Leave" table to the workbook.';
 const isoDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
 
@@ -263,19 +295,29 @@ async function holidayList() {
   return out;
 }
 
-function leaveFrom(row, index) {
+function leaveFrom(row, index, layout) {
+  const v = (f) => (layout.pos[f] == null ? '' : row[layout.pos[f]]);
   return {
-    index, id: String(row[0]), requested: String(row[1] || ''), email: String(row[2]).trim().toLowerCase(),
-    name: String(row[3] || ''), start: cellDay(row[4]), end: cellDay(row[5]), days: Number(row[6]) || 0,
-    note: String(row[7] || ''), status: String(row[8] || 'Pending').trim() || 'Pending',
-    decidedBy: String(row[9] || ''), decidedAt: String(row[10] || ''),
+    index, raw: row, id: String(v('id')), requested: String(v('requested') || ''), email: String(v('email')).trim().toLowerCase(),
+    name: String(v('name') || ''), start: cellDay(v('start')), end: cellDay(v('end')), days: Number(v('days')) || 0,
+    note: String(v('note') || ''), status: String(v('status') || 'Pending').trim() || 'Pending',
+    decidedBy: String(v('decidedBy') || ''), decidedAt: String(v('decidedAt') || ''),
   };
 }
-const leaveRow = (l) => [l.id, l.requested, l.email, l.name, l.start, l.end, l.days, l.note, l.status, l.decidedBy, l.decidedAt];
-const publicLeave = ({ index, ...l }) => l;
+/** Full-width row for the table; keeps any extra columns the admin added. */
+function leaveRow(l, layout) {
+  const row = Array.from({ length: layout.width }, (_, i) => (l.raw && l.raw[i] != null ? l.raw[i] : ''));
+  for (const f of Object.keys(LEAVE_FIELDS)) if (layout.pos[f] != null) row[layout.pos[f]] = l[f] == null ? '' : l[f];
+  return row;
+}
+const publicLeave = ({ index, raw, ...l }) => l;
 
 async function allLeave() {
-  return (await tableRows('Leave', LEAVE_MISSING)).map(leaveFrom);
+  const layout = await leaveLayout();
+  const rows = (await tableRows('Leave', LEAVE_MISSING)).map((row, i) => leaveFrom(row, i, layout))
+    .filter((l) => l.id || l.email); // skip blank rows inside the table
+  rows.layout = layout;
+  return rows;
 }
 
 function balanceFor(staff, leave, year) {
@@ -334,7 +376,7 @@ async function handleLeave(b, staff, name) {
     const { day, time } = riyadh();
     const l = { id: 'L' + Date.now().toString(36).toUpperCase(), requested: `${day} ${time}`, email: staff.email, name,
       start, end, days, note, status: 'Pending', decidedBy: '', decidedAt: '' };
-    await graph('POST', '/tables/Leave/rows', { values: [leaveRow(l)] }, LEAVE_MISSING);
+    await graph('POST', '/tables/Leave/rows', { values: [leaveRow(l, leave.layout)] }, LEAVE_MISSING);
     leave.push({ ...l, index: leave.length });
     const managers = (await tableRows('Staff')).map(staffFrom).filter((s) => s.active && s.manager && s.email !== staff.email).map((s) => s.email);
     await notify(managers, `Leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
@@ -347,7 +389,7 @@ async function handleLeave(b, staff, name) {
     if (!l) throw new HttpError(404, 'That request was not found. Please refresh.');
     return l;
   };
-  const save = async (l) => graph('PATCH', `/tables/Leave/rows/itemAt(index=${l.index})`, { values: [leaveRow(l).slice(0, LEAVE_COLUMNS)] }, LEAVE_MISSING);
+  const save = async (l) => graph('PATCH', `/tables/Leave/rows/itemAt(index=${l.index})`, { values: [leaveRow(l, leave.layout)] }, LEAVE_MISSING);
 
   if (b.action === 'leaveCancel') {
     const l = find();
