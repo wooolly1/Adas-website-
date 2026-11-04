@@ -43,7 +43,12 @@ website's **Vercel** project. Time: about 20 minutes.
      If it's blank, the request goes to everyone with `Role` = Manager.
    - **`Role`** = **Manager** for anyone who approves leave; **HR** or **Admin** can see and decide
      every request. Leave it blank for everyone else.
-   - **`Annual Days`** is optional: blank means the default **22 days** a year.
+   - **`Joining Date`** (recommended): the date the person joined, e.g. `2023-03-15` or `15/03/2023`.
+     Their days are calculated from it: **22 a year**, **30 a year after 5 years' service** (the year
+     they reach 5 years is split by date), and the **joining year is pro-rated** (joined 1 July → 11 days).
+   - **`Opening Balance`** (optional): days someone still had left from before the system started
+     (2026). From then on, **unused days carry over automatically** into the next year.
+   - **`Annual Days`** is optional and overrides the 22/30 rule for that person (still pro-rated in the joining year).
    - A manager can't approve their own leave — set their own `Manager` to the person above them.
 3. **Sheet "Attendance"** — headers in row 1, then *Insert → Table*, name it
    **`Attendance`** (exactly). The 14 columns, in this order:
@@ -123,6 +128,9 @@ Vercel → the website project → **Settings → Environment Variables** → ad
 | `RADIUS_M` | allowed distance in metres, e.g. `150` |
 | `ALLOWED_DOMAIN` | `adas.com.sa` |
 | `ANNUAL_LEAVE_DAYS` | optional, default `22` |
+| `LEAVE_DAYS_AFTER_5Y` | optional, default `30` |
+| `LEAVE_CARRY_MAX` | optional: most days that can carry into a new year (blank = no limit) |
+| `LEAVE_START_YEAR` | optional, default `2026` — first year the system counts carry-over from |
 | `MAIL_FROM` | optional: a mailbox such as `office@adas.com.sa` to send leave emails from |
 
 Office coordinates: in Google Maps, right-click exactly on the office building — the first

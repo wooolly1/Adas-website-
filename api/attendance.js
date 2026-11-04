@@ -165,6 +165,8 @@ const STAFF_FIELDS = {
   email: ['email', 'emailaddress', 'officeemail'], name: ['name', 'fullname', 'employee'], active: ['active', 'enabled'],
   role: ['role', 'access', 'type'], annualDays: ['annualdays', 'leavedays', 'annualleave', 'allowance'],
   managerRef: ['manager', 'manageremail', 'linemanager', 'reportsto', 'approver', 'approveremail'],
+  joinDate: ['joiningdate', 'joindate', 'dateofjoining', 'joined', 'hiredate', 'startdate', 'employmentdate'],
+  opening: ['openingbalance', 'carriedforward', 'broughtforward', 'carryover', 'previousbalance'],
 };
 const STAFF_DEFAULT_POS = { email: 0, name: 1, active: 2, role: 3, annualDays: 4, managerRef: 5 };
 
@@ -189,8 +191,20 @@ function staffFrom(row, pos = STAFF_DEFAULT_POS) {
     manager: /^(manager|admin|hr)$/i.test(role),
     admin: /^(admin|hr)$/i.test(role),
     managerRef: String(v('managerRef') || '').trim().toLowerCase(),
-    allowance: Number.isFinite(days) && days > 0 ? days : Number(env('ANNUAL_LEAVE_DAYS', '22')),
+    override: Number.isFinite(days) && days > 0 ? days : null,
+    joinDate: anyDay(v('joinDate')),
+    opening: Number(v('opening')) || 0,
   };
+}
+
+/** A date cell as YYYY-MM-DD: ISO text, Excel serial, or d/m/yyyy text. Returns '' if not a date. */
+function anyDay(v) {
+  if (v === '' || v == null) return '';
+  const c = cellDay(v);
+  if (isoDay(c)) return c;
+  const m = String(v).trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  if (m) { const iso = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; if (isoDay(iso)) return iso; }
+  return '';
 }
 
 /** All staff rows (active and inactive), read once per request. */
@@ -353,11 +367,56 @@ async function allLeave() {
   return rows;
 }
 
+/* ---- entitlement ----
+ * Per year: base days (ANNUAL_LEAVE_DAYS, default 22), or LEAVE_DAYS_AFTER_5Y (default 30) once the
+ * person has 5 years' service; the year they cross 5 years is split by date. The joining year is
+ * pro-rated from the joining date. A Staff "Annual Days" value replaces the rate for that person.
+ * Carry-over: whatever is left at the end of a year is added to the next one, starting from
+ * LEAVE_START_YEAR (default 2026), whose opening carry is the Staff "Opening Balance".
+ * LEAVE_CARRY_MAX (optional) caps the days carried each year. */
+const half = (n) => Math.round(n * 2) / 2;
+const leaveStartYear = () => Number(env('LEAVE_START_YEAR', '2026'));
+
+function serviceYears(joinDate, onDay) {
+  if (!joinDate) return null;
+  const [jy, jm, jd] = joinDate.split('-').map(Number);
+  const [y, m, d] = onDay.split('-').map(Number);
+  return y - jy - ((m < jm || (m === jm && d < jd)) ? 1 : 0);
+}
+
+function entitlementFor(staff, year) {
+  const base = Number(env('ANNUAL_LEAVE_DAYS', '22')), senior = Number(env('LEAVE_DAYS_AFTER_5Y', '30'));
+  const first = `${year}-01-01`, last = `${year}-12-31`;
+  if (staff.joinDate && staff.joinDate > last) return 0;
+  const from = staff.joinDate && staff.joinDate > first ? staff.joinDate : first;
+  const daysInYear = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 864e5;
+  let total = 0;
+  for (let d = new Date(from + 'T00:00:00Z'); d <= new Date(last + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const day = d.toISOString().slice(0, 10);
+    const rate = staff.override != null ? staff.override
+      : (staff.joinDate && serviceYears(staff.joinDate, day) >= 5 ? senior : base);
+    total += rate / daysInYear;
+  }
+  return half(total);
+}
+
 function balanceFor(staff, leave, year) {
-  const mine = leave.filter((l) => l.email === staff.email && l.start.slice(0, 4) === String(year));
-  const used = mine.filter((l) => /^approved$/i.test(l.status)).reduce((a, l) => a + l.days, 0);
-  const pending = mine.filter((l) => /^pending$/i.test(l.status)).reduce((a, l) => a + l.days, 0);
-  return { year, allowance: staff.allowance, used, pending, remaining: staff.allowance - used - pending };
+  const mine = leave.filter((l) => l.email === staff.email);
+  const sum = (y, re) => mine.filter((l) => l.start.slice(0, 4) === String(y) && re.test(l.status)).reduce((a, l) => a + l.days, 0);
+  const startYear = leaveStartYear(), cap = env('LEAVE_CARRY_MAX') === '' ? Infinity : Number(env('LEAVE_CARRY_MAX'));
+  let carried = 0;
+  if (year >= startYear) {
+    carried = staff.opening || 0;
+    for (let y = startYear; y < year; y++) {
+      const left = entitlementFor(staff, y) + carried - sum(y, /^approved$/i);
+      carried = Math.max(0, Math.min(cap, left));
+    }
+  }
+  const entitlement = entitlementFor(staff, year);
+  const used = sum(year, /^approved$/i), pending = sum(year, /^pending$/i);
+  const allowance = half(entitlement + carried);
+  return { year, entitlement, carried: half(carried), allowance, used, pending, remaining: half(allowance - used - pending),
+    joinDate: staff.joinDate || '', serviceYears: staff.joinDate ? Math.max(0, serviceYears(staff.joinDate, riyadh().day)) : null };
 }
 
 /** Best-effort email via Microsoft Graph (needs MAIL_FROM + Mail.Send). Never blocks the request. */
@@ -524,4 +583,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = { maxDuration: 15 };
-module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide };
+module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay };
