@@ -3450,10 +3450,15 @@ function AnnualLeave() {
             <span className="font-display text-6xl leading-none text-ink-900">{bal.remaining}</span>
             <span className="pb-1 text-sm text-ink-800/70">of {bal.allowance} days left</span>
           </div>
+          <p className="mt-2 text-xs text-ink-800/70">
+            {bal.entitlement} days for {bal.year}{bal.carried > 0 && ` + ${bal.carried} carried from ${bal.year - 1}`}
+            {bal.joinDate && ` · joined ${new Date(bal.joinDate + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`}
+            {bal.serviceYears != null && bal.serviceYears >= 1 && ` · ${bal.serviceYears} year${bal.serviceYears === 1 ? '' : 's'} of service`}
+          </p>
           <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-ink-900/10" aria-hidden="true">
             <div className="flex h-full">
-              <span className="bg-gold-500" style={{ width: `${(bal.used / bal.allowance) * 100}%` }} />
-              <span className="bg-lilac-400" style={{ width: `${(bal.pending / bal.allowance) * 100}%` }} />
+              <span className="bg-gold-500" style={{ width: `${bal.allowance ? Math.min(100, (bal.used / bal.allowance) * 100) : 0}%` }} />
+              <span className="bg-lilac-400" style={{ width: `${bal.allowance ? Math.min(100, (bal.pending / bal.allowance) * 100) : 0}%` }} />
             </div>
           </div>
           <div className="mt-2 flex gap-5 text-xs text-ink-800/70">
@@ -3578,7 +3583,7 @@ function AnnualLeave() {
                   <ul className="mt-3 divide-y divide-ink-900/10 text-sm">
                     {data.team.map((t) => (
                       <li key={t.email} className="flex justify-between py-2"><span className="text-ink-900">{t.name}</span>
-                        <span className="text-ink-800/70">{t.remaining} left · {t.used} taken{t.pending ? ` · ${t.pending} pending` : ''}</span></li>
+                        <span className="text-right text-ink-800/70">{t.remaining} of {t.allowance} left{t.carried > 0 ? ` (incl. ${t.carried} carried)` : ''} · {t.used} taken{t.pending ? ` · ${t.pending} pending` : ''}</span></li>
                     ))}
                   </ul>
                 </details>
