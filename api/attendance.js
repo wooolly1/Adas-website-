@@ -761,11 +761,11 @@ function permSummary(perms, email, now = riyadh()) {
   }
   // today's request that hasn't been used yet (Requested / Approved / Declined)
   const req = [...mine].reverse().find((p) => p.date === now.day && !p.out && /^(requested|approved|declined)$/i.test(p.status)) || null;
-  // once a day: any short leave today that wasn't declined or cancelled counts
-  const takenToday = mine.find((p) => p.date === now.day && p.out && p.in) || null;
+  // short leave already taken today (can be split into several trips within the daily limit)
+  const takenToday = mine.filter((p) => p.date === now.day && p.out && p.in);
   return { open: open ? { out: open.out, reason: open.reason, allowed, planned: open.planned || null } : null, dayMin, weekMin, limits: lim,
     leftMin: Math.max(0, Math.min(lim.day - dayMin, lim.week - weekMin)),
-    usedToday: takenToday ? { out: takenToday.out, in: takenToday.in, minutes: takenToday.minutes } : null,
+    usedToday: takenToday.map((p) => ({ out: p.out, in: p.in, minutes: p.minutes })),
     request: req ? { id: req.index, status: req.status.charAt(0).toUpperCase() + req.status.slice(1).toLowerCase(),
       planned: req.planned, reason: req.reason, decidedBy: req.decidedBy } : null };
 }
@@ -980,7 +980,6 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ ok: true, perm: permSummary(perms, user.email, now) });
       }
       if (sum.open) throw new HttpError(409, `You are already out since ${sum.open.out}.`);
-      if (sum.usedToday) throw new HttpError(409, `Short leave is allowed once a day — you already took it today (${sum.usedToday.out}–${sum.usedToday.in}).`);
       if (sum.request && /^(requested|approved)$/i.test(sum.request.status)) {
         throw new HttpError(409, sum.request.status === 'Approved' ? 'Your request is already approved — tap Step out when you leave.' : 'You already have a request waiting for approval.');
       }
