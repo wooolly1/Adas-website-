@@ -192,3 +192,16 @@ Only Annual leave uses the annual balance. Every type goes to the same manager f
 Managers see their team, HR/Admin see everyone, on the Team page: days present, hours, late
 arrivals, missing check-outs, absences (working days with no check-in and no approved leave)
 and leave by type. **Download for Excel** saves a CSV that opens in Excel.
+
+### Short leave (step out / back in)
+
+Add a table **`Permissions`** (headers in row 1, *Insert → Table*, name it exactly) with:
+
+`Date` · `Email` · `Name` · `Out` · `In` · `Minutes` · `Reason` · `Status`
+
+Set `Date`, `Out` and `In` to *Text*. While checked in, staff tap **Step out** (optional reason) and
+**Back in**; both check they're at the office. Limits: **1.5 hours a day** and **6 hours a week**
+(Sun–Thu) — Step out is blocked when used up, and time beyond the limit is marked
+`Over limit by N min` in `Status`. The manager is emailed on each step-out. Checking out while
+stepped out closes it at check-out time. Change the limits with `PERMISSION_DAY_MIN` (default 90)
+and `PERMISSION_WEEK_MIN` (default 360) in Vercel. Without the table, the buttons don't appear.

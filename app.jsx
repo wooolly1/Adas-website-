@@ -3687,9 +3687,9 @@ function MonthlyReport() {
   const types = rep ? rep.leaveTypes.filter((t) => rep.rows.some((r) => r.leave[t])) : [];
 
   const download = () => {
-    const head = ['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late arrivals', 'Late dates', 'No check-out', 'Absent', ...rep.leaveTypes.map((t) => `${t} leave`)];
+    const head = ['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late arrivals', 'Late dates', 'No check-out', 'Absent', 'Short leave (h)', 'Short leave over limit', ...rep.leaveTypes.map((t) => `${t} leave`)];
     const esc = (v) => { const x = String(v == null ? '' : v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
-    const lines = [head, ...rep.rows.map((r) => [r.name, r.email, r.workingDays, r.present, r.hours, r.late, r.lateDates.join(' '), r.noCheckout, r.absent,
+    const lines = [head, ...rep.rows.map((r) => [r.name, r.email, r.workingDays, r.present, r.hours, r.late, r.lateDates.join(' '), r.noCheckout, r.absent, r.shortLeaveHours || 0, r.shortLeaveOver || 0,
       ...rep.leaveTypes.map((t) => r.leave[t] || 0)])].map((row) => row.map(esc).join(','));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ADAS-attendance-${rep.month}.csv`;
@@ -3729,6 +3729,7 @@ function MonthlyReport() {
                 {open === r.email && (
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-800/80 sm:grid-cols-4">
                     {[['Present', `${r.present} of ${r.workingDays}`], ['Hours', r.hours], ['Late', r.late], ['No check-out', r.noCheckout], ['Absent', r.absent],
+                      ['Short leave', `${r.shortLeaveHours || 0}h${r.shortLeaveOver ? ` · ${r.shortLeaveOver} over` : ''}`],
                       ...Object.entries(r.leave).map(([t, v]) => [`${t} leave`, `${v}d`])].map(([k, v]) => (
                       <div key={k} className="rounded-xl border border-ink-900/10 p-2.5"><p className="stamp text-[9px] text-ink-700/50">{k}</p><p className="mt-1 text-sm text-ink-900">{v}</p></div>
                     ))}
@@ -3744,6 +3745,52 @@ function MonthlyReport() {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+const hm = (min) => `${Math.floor(min / 60)}:${String(Math.round(min % 60)).padStart(2, '0')}`;
+
+/* Step out / Back in during the day — limits come from the API */
+function ShortLeave({ perm, busy, reason, setReason, btnPair, onGo }) {
+  const [, tick] = useState(0);
+  useEffect(() => { if (!perm.open) return undefined; const t = setInterval(() => tick((n) => n + 1), 30000); return () => clearInterval(t); }, [perm.open]);
+  const nowMin = (() => { const [h, m] = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }).split(':').map(Number); return h * 60 + m; })();
+  const [oh, om] = perm.open ? perm.open.out.split(':').map(Number) : [0, 0];
+  const outFor = perm.open ? Math.max(0, nowMin - (oh * 60 + om)) : 0;
+  const leftWhileOut = perm.open ? perm.open.allowed - outFor : 0; // negative = over the limit
+  const over = perm.open && leftWhileOut < 0;
+  const dayLeft = Math.max(0, perm.limits.day - perm.dayMin), weekLeft = Math.max(0, perm.limits.week - perm.weekMin);
+  return (
+    <div className="mt-8 border-t border-ink-900/10 pt-6">
+      <div className="flex items-end justify-between gap-3">
+        <p className="font-display text-2xl text-ink-900">Short leave</p>
+        <p className="text-xs text-ink-800/70">{perm.open
+          ? (over ? `${hm(-leftWhileOut)} over the limit` : `${hm(leftWhileOut)} left before your limit`)
+          : `${hm(dayLeft)} left today · ${hm(weekLeft)} this week`}</p>
+      </div>
+      <p className="mt-1 text-xs text-ink-800/60">Up to {hm(perm.limits.day)} a day and {hm(perm.limits.week)} a week. Your manager is notified when you step out.</p>
+      {perm.open ? (
+        <p className={'mt-4 rounded-2xl p-4 text-sm ' + (over ? 'bg-red-500/10 text-red-700' : 'bg-lilac-400/15 text-ink-900')}>
+          Out since {perm.open.out}{perm.open.reason ? ` · ${perm.open.reason}` : ''} — {hm(outFor)} so far{over ? ' · over your limit' : ''}
+        </p>
+      ) : (
+        <label className="mt-4 block"><span className="stamp text-ink-700/60">Reason (optional)</span>
+          <input type="text" maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. bank, doctor, school pickup"
+            className="mt-2 w-full rounded-none border-0 border-b border-ink-900/12 bg-transparent px-0 py-3 text-ink-900 outline-none placeholder:text-ink-700/40 focus:border-gold-400 focus:ring-0" />
+        </label>
+      )}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <button onClick={() => onGo('permOut')} disabled={!!busy || !!perm.open || perm.leftMin <= 0}
+          className={btnPair + ' border border-ink-900/15 text-ink-900 hover:border-gold-400'}>
+          {busy === 'permOut' ? 'Locating…' : 'Step out'}
+        </button>
+        <button onClick={() => onGo('permIn')} disabled={!!busy || !perm.open}
+          className={btnPair + ' bg-lilac-500 text-white hover:bg-lilac-600'}>
+          {busy === 'permIn' ? 'Locating…' : 'Back in'}
+        </button>
+      </div>
+      {!perm.open && perm.leftMin <= 0 && <p className="mt-2 text-center text-xs text-ink-700/60">No short leave left {dayLeft <= 0 ? 'today' : 'this week'}.</p>}
     </div>
   );
 }
@@ -3791,8 +3838,20 @@ function TeamPage() {
     const pos = await getPosition();
     const r = await attCall(action, pos);
     if (!r.ok) { if (r.error === 'signed_out') { setStep('signin'); throw new Error('Your session expired. Please sign in again.'); } throw new Error(r.error); }
-    setMe((m) => ({ ...m, today: r.today }));
+    setMe((m) => ({ ...m, today: r.today, perm: r.perm !== undefined ? r.perm : m.perm }));
     setMsg({ type: 'ok', text: action === 'checkIn' ? 'Checked in. Have a great day.' : 'Checked out. See you tomorrow.' });
+  });
+
+  const [reason, setReason] = useState('');
+  const permGo = (action) => run(action, async () => {
+    const pos = await getPosition();
+    const r = await attCall(action, action === 'permOut' ? { ...pos, reason } : pos);
+    if (!r.ok) { if (r.error === 'signed_out') { setStep('signin'); throw new Error('Your session expired. Please sign in again.'); } throw new Error(r.error); }
+    setMe((m) => ({ ...m, perm: r.perm }));
+    if (action === 'permOut') { setReason(''); setMsg({ type: 'ok', text: 'Stepped out. Tap Back in when you return.' }); }
+    else setMsg(r.closed && /^over/i.test(r.closed.status)
+      ? { type: 'error', text: `Welcome back — ${r.closed.minutes} min out, ${r.closed.status.toLowerCase()}.` }
+      : { type: 'ok', text: `Welcome back — ${r.closed ? r.closed.minutes : 0} min out.` });
   });
 
   const signOut = async () => {
@@ -3863,6 +3922,10 @@ function TeamPage() {
                   </div>
                 )}
                 {!today.checkIn && <p className="mt-3 text-center text-xs text-ink-700/60">Check out unlocks after you check in.</p>}
+
+                {me.perm && today.checkIn && !today.checkOut && (
+                  <ShortLeave perm={me.perm} busy={busy} reason={reason} setReason={setReason} btnPair={btnPair} onGo={permGo} />
+                )}
                 <button onClick={signOut} className="stamp mt-8 w-full text-center text-ink-700/60 hover:text-gold-600">Sign out</button>
               </div>
             )}

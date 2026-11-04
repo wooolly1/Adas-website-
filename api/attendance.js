@@ -634,6 +634,75 @@ async function handleLeave(b, staff, name, team) {
 }
 
 
+
+/* ------------------------------------------------- short leave (permission) */
+/* Excel table "Permissions" (columns matched by header):
+ *   Date | Email | Name | Out | In | Minutes | Reason | Status
+ * Limits: PERMISSION_DAY_MIN (default 90) per day, PERMISSION_WEEK_MIN (default 360) per Sun–Thu week. */
+const PERM_FIELDS = {
+  date: ['date', 'day'], email: ['email'], name: ['name', 'employee'], out: ['out', 'outtime', 'left', 'stepout'],
+  in: ['in', 'intime', 'back', 'returned', 'backin'], minutes: ['minutes', 'mins', 'duration'],
+  reason: ['reason', 'note', 'notes'], status: ['status', 'flag'],
+};
+const PERM_MISSING = 'Short leave is not set up yet. Please ask the admin to add the "Permissions" table to the workbook.';
+const permLimits = () => ({ day: Number(env('PERMISSION_DAY_MIN', '90')), week: Number(env('PERMISSION_WEEK_MIN', '360')) });
+
+async function permLayout() {
+  const cols = ((await graph('GET', '/tables/Permissions/columns?$select=name', null, PERM_MISSING)).value || []).map((c) => c.name);
+  const norm = cols.map(normHeader), pos = {};
+  for (const [f, names] of Object.entries(PERM_FIELDS)) { const i = norm.findIndex((h) => names.includes(h)); if (i >= 0) pos[f] = i; }
+  const missing = ['date', 'email', 'out', 'in', 'minutes'].filter((f) => pos[f] == null);
+  if (missing.length) throw new HttpError(503, `The Permissions table is missing column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. Its headers are: ${cols.join(', ') || '(none)'}.`);
+  return { width: cols.length, pos };
+}
+async function allPerms() {
+  const layout = await permLayout();
+  const rows = (await tableRows('Permissions', PERM_MISSING)).map((row, index) => {
+    const v = (f) => (layout.pos[f] == null ? '' : row[layout.pos[f]]);
+    return { index, raw: row, date: cellDay(v('date')), email: String(v('email')).trim().toLowerCase(), name: String(v('name') || ''),
+      out: v('out') === '' ? '' : cellTime(v('out')), in: v('in') === '' ? '' : cellTime(v('in')),
+      minutes: Number(v('minutes')) || 0, reason: String(v('reason') || ''), status: String(v('status') || '') };
+  }).filter((p) => p.email);
+  rows.layout = layout;
+  return rows;
+}
+function permRow(p, layout) {
+  const row = Array.from({ length: layout.width }, (_, i) => (p.raw && p.raw[i] != null ? p.raw[i] : ''));
+  for (const f of Object.keys(PERM_FIELDS)) if (layout.pos[f] != null) row[layout.pos[f]] = p[f] == null ? '' : p[f];
+  return row;
+}
+/** Sunday that starts the week containing `day`. */
+function weekStart(day) {
+  const d = new Date(day + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+  return d.toISOString().slice(0, 10);
+}
+function permSummary(perms, email, now = riyadh()) {
+  const mine = perms.filter((p) => p.email === email);
+  const ws = weekStart(now.day);
+  const open = mine.find((p) => p.date === now.day && p.out && !p.in) || null;
+  const liveMin = open ? Math.max(0, toMin(now.time) - toMin(open.out)) : 0;
+  const dayMin = mine.filter((p) => p.date === now.day && p.in).reduce((a, p) => a + p.minutes, 0) + liveMin;
+  const weekMin = mine.filter((p) => p.date >= ws && p.date <= now.day && p.in).reduce((a, p) => a + p.minutes, 0) + liveMin;
+  const lim = permLimits();
+  let allowed = null;
+  if (open) { // what was left when they stepped out
+    const dayDone = dayMin - liveMin, weekDone = weekMin - liveMin;
+    allowed = Math.max(0, Math.min(lim.day - dayDone, lim.week - weekDone));
+  }
+  return { open: open ? { out: open.out, reason: open.reason, allowed } : null, dayMin, weekMin, limits: lim,
+    leftMin: Math.max(0, Math.min(lim.day - dayMin, lim.week - weekMin)) };
+}
+async function closeOpenPerm(perms, email, time) {
+  const now = riyadh();
+  const open = perms.find((p) => p.email === email && p.date === now.day && p.out && !p.in);
+  if (!open) return null;
+  const before = permSummary(perms.filter((p) => p !== open), email, { day: now.day, time: open.out });
+  open.in = time; open.minutes = Math.max(0, toMin(time) - toMin(open.out));
+  open.status = open.minutes > before.leftMin ? `Over limit by ${open.minutes - before.leftMin} min` : 'OK';
+  await graph('PATCH', `/tables/Permissions/rows/itemAt(index=${open.index})`, { values: [permRow(open, perms.layout)] }, PERM_MISSING);
+  return open;
+}
+
 /* ---------------------------------------------------------- monthly report */
 /* Office day starts WORK_START (default 09:00); a check-in after WORK_START + LATE_GRACE_MIN
  * (default 15) is "late". Absent = a working day (Sun–Thu, not a holiday, on/after joining, up to
@@ -644,10 +713,11 @@ async function handleReport(b, staff, team) {
   const month = /^\d{4}-\d{2}$/.test(String(b.month || '')) ? b.month : riyadh().day.slice(0, 7);
   const scope = team.filter((s) => s.active && (staff.admin || canDecide(staff, s, team)));
   if (!staff.admin && !scope.length) throw new HttpError(403, 'Reports are for managers.');
-  const [att, leave, holidays] = await Promise.all([
+  const [att, leave, holidays, perms] = await Promise.all([
     tableRows('Attendance'),
     allLeave().catch(() => []),
     holidayList(),
+    allPerms().catch(() => []),
   ]);
   const holidaySet = new Set(holidays.map((h) => h.date));
   const today = riyadh().day;
@@ -686,6 +756,8 @@ async function handleReport(b, staff, team) {
       lateDates: lateDays.map((d) => `${d.slice(8)} (${days[d].in})`),
       noCheckout: present.filter((d) => !days[d].out && d < today).length,
       absent: due.filter((d) => !days[d] && !onLeave.has(d) && d < today).length,
+      shortLeaveHours: Math.round(perms.filter((p) => p.email === s.email && p.date >= first && p.date <= lastDay).reduce((a, p) => a + p.minutes, 0) / 6) / 10,
+      shortLeaveOver: perms.filter((p) => p.email === s.email && p.date >= first && p.date <= lastDay && /^over/i.test(p.status)).length,
       leave: Object.fromEntries(Object.entries(leaveByType).map(([k, v]) => [(LEAVE_TYPES[k] || LEAVE_TYPES.annual).label, v])),
     };
   }).sort((a, b2) => a.name.localeCompare(b2.name));
@@ -707,8 +779,40 @@ module.exports = async function handler(req, res) {
     if (!staff) throw new HttpError(403, 'Your account is not on the team list. Please ask the admin to add you.');
     const name = staff.name || user.name;
 
+    const permsOrNull = async () => { try { return await allPerms(); } catch (e) { if (e.status === 503) return null; throw e; } };
+
     if (b.action === 'status') {
-      return res.status(200).json({ ok: true, name, email: user.email, today: summary(await todayRecord(user.email)) });
+      const [rec, perms] = await Promise.all([todayRecord(user.email), permsOrNull()]);
+      return res.status(200).json({ ok: true, name, email: user.email, today: summary(rec), perm: perms ? permSummary(perms, user.email) : null });
+    }
+
+    if (b.action === 'permOut' || b.action === 'permIn') {
+      const p = checkPlace(b);
+      const rec = await todayRecord(user.email);
+      if (!rec) throw new HttpError(409, 'Please check in first.');
+      if (rec.row[8]) throw new HttpError(409, 'You have already checked out today.');
+      const perms = await allPerms();
+      const now = riyadh();
+      const sum = permSummary(perms, user.email, now);
+      if (b.action === 'permOut') {
+        if (sum.open) throw new HttpError(409, `You stepped out at ${sum.open.out}. Tap Back in when you return.`);
+        if (sum.leftMin <= 0) {
+          throw new HttpError(409, sum.dayMin >= sum.limits.day
+            ? `You've used today's ${sum.limits.day / 60} hours of short leave.`
+            : `You've used this week's ${sum.limits.week / 60} hours of short leave.`);
+        }
+        const reason = String(b.reason || '').slice(0, 200);
+        const row = { date: now.day, email: user.email, name, out: now.time, in: '', minutes: '', reason, status: 'Out' };
+        await graph('POST', '/tables/Permissions/rows', { values: [permRow(row, perms.layout)] }, PERM_MISSING);
+        perms.push({ ...row, minutes: 0, index: perms.length });
+        const back = new Date(Date.UTC(2000, 0, 1, 0, toMin(now.time) + sum.leftMin)).toISOString().slice(11, 16);
+        await notify(approversFor(staff, team).map((s) => s.email), `Short leave: ${name} stepped out at ${now.time}`,
+          `${name} stepped out of the office at ${now.time}${reason ? ` (${reason})` : ''}.\nShort leave left today: ${sum.leftMin} min — expected back by ${back}.\n\nhttps://adas.com.sa/#/team`);
+        return res.status(200).json({ ok: true, perm: permSummary(perms, user.email, now) });
+      }
+      if (!sum.open) throw new HttpError(409, 'You are not stepped out.');
+      const closed = await closeOpenPerm(perms, user.email, now.time);
+      return res.status(200).json({ ok: true, perm: permSummary(perms, user.email, now), closed: { minutes: closed.minutes, status: closed.status } });
     }
 
     if (b.action === 'checkIn') {
@@ -732,7 +836,9 @@ module.exports = async function handler(req, res) {
       const row = rec.row.slice(0, LOG_COLUMNS);
       row.splice(8, 6, time, p.distance, p.accuracy, p.lat, p.lng, hours);
       await graph('PATCH', `/tables/Attendance/rows/itemAt(index=${rec.index})`, { values: [row] });
-      return res.status(200).json({ ok: true, today: summary({ row }) });
+      const perms = await permsOrNull();
+      if (perms) await closeOpenPerm(perms, user.email, time); // stepped out and went home
+      return res.status(200).json({ ok: true, today: summary({ row }), perm: perms ? permSummary(perms, user.email) : null });
     }
 
     if (b.action === 'report') return res.status(200).json(await handleReport(b, staff, team));
@@ -750,4 +856,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = { maxDuration: 15 };
-module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay, leaveTypeKey };
+module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay, leaveTypeKey, permSummary, weekStart };
