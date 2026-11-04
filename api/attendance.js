@@ -522,8 +522,97 @@ function balanceFor(staff, leave, year, asOf = riyadh().day) {
     joinDate: staff.joinDate || '', serviceYears: staff.joinDate ? Math.max(0, serviceYears(staff.joinDate, riyadh().day)) : null };
 }
 
-/** Best-effort email via Microsoft Graph (needs MAIL_FROM + Mail.Send). Never blocks the request. */
+
+/* ------------------------------------------------------- push notifications */
+/* Web Push (RFC 8291 encryption + RFC 8292 VAPID) with Node's crypto — no extra packages.
+ * Vercel env: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (base64url), VAPID_SUBJECT (mailto:…).
+ * Devices are stored in the Excel table "Devices": Email | Endpoint | P256dh | Auth | Added | Device */
+const b64u = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const fromB64u = (s) => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+const DEVICE_FIELDS = { email: ['email'], endpoint: ['endpoint', 'subscription'], p256dh: ['p256dh', 'key', 'publickey'],
+  auth: ['auth', 'authsecret'], added: ['added', 'date', 'created'], device: ['device', 'useragent', 'phone'] };
+const DEVICES_MISSING = 'Notifications are not set up yet. Please ask the admin to add the "Devices" table to the workbook.';
+
+function vapidKeys() {
+  const pub = env('VAPID_PUBLIC_KEY'), priv = env('VAPID_PRIVATE_KEY');
+  if (!pub || !priv) return null;
+  const P = fromB64u(pub);
+  if (P.length !== 65 || P[0] !== 4) return null;
+  const key = crypto.createPrivateKey({ key: { kty: 'EC', crv: 'P-256', x: b64u(P.slice(1, 33)), y: b64u(P.slice(33)), d: priv }, format: 'jwk' });
+  return { publicKey: pub, key };
+}
+
+function vapidHeader(endpoint, keys) {
+  const aud = new URL(endpoint).origin;
+  const enc = (o) => b64u(Buffer.from(JSON.stringify(o)));
+  const unsigned = `${enc({ typ: 'JWT', alg: 'ES256' })}.${enc({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: env('VAPID_SUBJECT', 'mailto:office@adas.com.sa') })}`;
+  const sig = crypto.sign('sha256', Buffer.from(unsigned), { key: keys.key, dsaEncoding: 'ieee-p1363' });
+  return `vapid t=${unsigned}.${b64u(sig)}, k=${keys.publicKey}`;
+}
+
+/** aes128gcm-encrypt `payload` for a browser subscription (RFC 8291). */
+function encryptPush(payload, p256dh, authSecret) {
+  const uaPublic = fromB64u(p256dh), auth = fromB64u(authSecret);
+  const ecdh = crypto.createECDH('prime256v1'); ecdh.generateKeys();
+  const asPublic = ecdh.getPublicKey();
+  const shared = ecdh.computeSecret(uaPublic);
+  const ikm = Buffer.from(crypto.hkdfSync('sha256', shared, auth, Buffer.concat([Buffer.from('WebPush: info\0'), uaPublic, asPublic]), 32));
+  const salt = crypto.randomBytes(16);
+  const cek = Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16));
+  const nonce = Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12));
+  const cipher = crypto.createCipheriv('aes-128-gcm', cek, nonce);
+  const body = Buffer.concat([cipher.update(Buffer.concat([Buffer.from(payload), Buffer.from([2])])), cipher.final(), cipher.getAuthTag()]);
+  const header = Buffer.alloc(21); salt.copy(header, 0); header.writeUInt32BE(4096, 16); header[20] = asPublic.length;
+  return Buffer.concat([header, asPublic, body]);
+}
+
+async function deviceLayout() {
+  const cols = ((await graph('GET', '/tables/Devices/columns?$select=name', null, DEVICES_MISSING)).value || []).map((c) => c.name);
+  const norm = cols.map(normHeader), pos = {};
+  for (const [f, names] of Object.entries(DEVICE_FIELDS)) { const i = norm.findIndex((h) => names.includes(h)); if (i >= 0) pos[f] = i; }
+  const missing = ['email', 'endpoint', 'p256dh', 'auth'].filter((f) => pos[f] == null);
+  if (missing.length) throw new HttpError(503, `The Devices table is missing column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.`);
+  return { width: cols.length, pos };
+}
+async function allDevices() {
+  const layout = await deviceLayout();
+  const rows = (await tableRows('Devices', DEVICES_MISSING)).map((row, index) => {
+    const v = (f) => (layout.pos[f] == null ? '' : String(row[layout.pos[f]] || '').trim());
+    return { index, email: v('email').toLowerCase(), endpoint: v('endpoint'), p256dh: v('p256dh'), auth: v('auth'), device: v('device') };
+  }).filter((d) => d.endpoint);
+  rows.layout = layout;
+  return rows;
+}
+const deviceRow = (d, layout) => { const row = Array(layout.width).fill(''); for (const f of Object.keys(DEVICE_FIELDS)) if (layout.pos[f] != null) row[layout.pos[f]] = d[f] || ''; return row; };
+
+/** Send a notification to every device of these people. Never throws; removes dead subscriptions. */
+async function pushTo(emails, msg) {
+  const keys = vapidKeys();
+  if (!keys || !emails.length) return 0;
+  let devices;
+  try { devices = await allDevices(); } catch (e) { return 0; }
+  const want = new Set(emails.map((e) => String(e).toLowerCase()));
+  const payload = JSON.stringify({ title: msg.title || 'ADAS', body: msg.body || '', url: msg.url || '/#/team', tag: msg.tag || undefined });
+  const dead = [];
+  let sent = 0;
+  await Promise.all(devices.filter((d) => want.has(d.email)).map(async (d) => {
+    try {
+      const r = await fetch(d.endpoint, { method: 'POST', body: encryptPush(payload, d.p256dh, d.auth),
+        headers: { Authorization: vapidHeader(d.endpoint, keys), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '86400', Urgency: 'high' } });
+      if (r.status === 404 || r.status === 410) dead.push(d.index);
+      else if (r.ok) sent++;
+      else console.warn('push failed', r.status, (await r.text().catch(() => '')).slice(0, 200));
+    } catch (e) { console.warn('push error', e.message); }
+  }));
+  for (const i of dead.sort((a, b) => b - a)) {
+    await graph('DELETE', `/tables/Devices/rows/itemAt(index=${i})`).catch(() => {});
+  }
+  return sent;
+}
+
+/** Best-effort phone notification + email via Microsoft Graph (needs MAIL_FROM + Mail.Send). Never blocks the request. */
 async function notify(to, subject, text, attachments = []) {
+  await pushTo(to, { title: subject, body: String(text || '').split('\n')[0].slice(0, 180) });
   const from = env('MAIL_FROM');
   if (!from || !to.length) return false;
   try {
@@ -938,9 +1027,41 @@ async function handleLeaveReport(b, staff, team) {
 
 /* --------------------------------------------------------------- handler */
 
+/* Scheduled reminders (vercel.json "crons"): GET /api/attendance?cron=checkin | checkout.
+ * Vercel sends "Authorization: Bearer <CRON_SECRET>" when CRON_SECRET is set. */
+async function runCron(job) {
+  const day = riyadh().day, w = new Date(day + 'T00:00:00Z').getUTCDay();
+  if (w === 5 || w === 6) return { skipped: 'weekend' };
+  const [team, att, leave, holidays] = await Promise.all([loadStaff(), tableRows('Attendance'), allLeave().catch(() => []), holidayList()]);
+  if (holidays.some((h) => h.date === day)) return { skipped: 'holiday' };
+  const today = {};
+  for (const row of att) if (cellDay(row[0]) === day) today[String(row[1]).trim().toLowerCase()] = { in: cellTime(row[3]), out: row[8] === '' ? '' : cellTime(row[8]) };
+  const onLeave = (email) => leave.find((l) => l.email === email && /^approved$/i.test(l.status) && l.start <= day && l.end >= day && l.type !== 'site');
+  const active = team.filter((s) => s.active && (!s.joinDate || s.joinDate <= day) && !onLeave(s.email));
+  const rules = dayRules();
+  let who = [], msg;
+  if (job === 'checkin') {
+    who = active.filter((s) => !today[s.email]);
+    msg = { title: `Check-in closes at ${rules.closes}`, body: 'You haven\'t checked in yet today. Open the app to check in.', tag: 'checkin' };
+  } else if (job === 'checkout') {
+    who = active.filter((s) => today[s.email] && today[s.email].in && !today[s.email].out);
+    msg = { title: 'Don\'t forget to check out', body: 'You\'re still checked in. Tap to check out when you leave.', tag: 'checkout' };
+  } else throw new HttpError(400, 'Unknown job.');
+  let sent = 0;
+  for (const s of who) sent += await pushTo([s.email], msg);
+  return { job, people: who.length, sent };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
+    if (req.method === 'GET' && req.query && req.query.cron) {
+      const secret = env('CRON_SECRET');
+      const auth = String(req.headers.authorization || '');
+      const fromVercel = /vercel-cron/i.test(String(req.headers['user-agent'] || ''));
+      if (secret ? auth !== `Bearer ${secret}` : !fromVercel) throw new HttpError(401, 'Not allowed.');
+      return res.status(200).json({ ok: true, ...(await runCron(String(req.query.cron))) });
+    }
     if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
     const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     const idToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -962,7 +1083,29 @@ module.exports = async function handler(req, res) {
       const shortLeaveMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
         .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
       return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site), shortLeaveMin },
-        perm: perms ? permSummary(perms, user.email) : null });
+        perm: perms ? permSummary(perms, user.email) : null, pushKey: vapidKeys() ? env('VAPID_PUBLIC_KEY') : null });
+    }
+
+    if (b.action === 'pushSubscribe' || b.action === 'pushUnsubscribe' || b.action === 'pushTest') {
+      if (!vapidKeys()) throw new HttpError(503, 'Notifications are not set up yet (VAPID keys). Please ask the admin.');
+      const devices = await allDevices();
+      if (b.action === 'pushTest') {
+        const n = await pushTo([user.email], { title: 'ADAS notifications are on', body: 'This is a test. You\'ll get alerts here for approvals and reminders.', tag: 'test' });
+        return res.status(200).json({ ok: true, sent: n });
+      }
+      const endpoint = String((b.subscription && b.subscription.endpoint) || b.endpoint || '');
+      if (!/^https:\/\//.test(endpoint)) throw new HttpError(400, 'Invalid notification subscription.');
+      const existing = devices.find((d) => d.endpoint === endpoint);
+      if (b.action === 'pushUnsubscribe') {
+        if (existing && existing.email === user.email) await graph('DELETE', `/tables/Devices/rows/itemAt(index=${existing.index})`, null, DEVICES_MISSING);
+        return res.status(200).json({ ok: true });
+      }
+      const keys = b.subscription.keys || {};
+      if (!keys.p256dh || !keys.auth) throw new HttpError(400, 'Invalid notification subscription.');
+      const d = { email: user.email, endpoint, p256dh: keys.p256dh, auth: keys.auth, added: riyadh().day, device: String(b.device || '').slice(0, 120) };
+      if (existing) await graph('PATCH', `/tables/Devices/rows/itemAt(index=${existing.index})`, { values: [deviceRow(d, devices.layout)] }, DEVICES_MISSING);
+      else await graph('POST', '/tables/Devices/rows', { values: [deviceRow(d, devices.layout)] }, DEVICES_MISSING);
+      return res.status(200).json({ ok: true, devices: devices.filter((x) => x.email === user.email && x.endpoint !== endpoint).length + 1 });
     }
 
     if (b.action === 'permRequest' || b.action === 'permCancel') {
@@ -1109,4 +1252,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = { maxDuration: 15 };
-module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay, leaveTypeKey, permSummary, weekStart, periodRange };
+module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay, leaveTypeKey, permSummary, weekStart, periodRange, encryptPush, vapidHeader, vapidKeys, runCron, b64u, fromB64u };
