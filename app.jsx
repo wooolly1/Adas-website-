@@ -3412,6 +3412,10 @@ function AnnualLeave() {
   const [end, setEnd] = useState('');
   const [note, setNote] = useState('');
   const [type, setType] = useState('annual');
+  const nowHM = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' });
+  const roundUp = (hm, add = 0) => { const [h, m] = hm.split(':').map(Number); const t = Math.min(23 * 60 + 30, Math.ceil((h * 60 + m) / 30) * 30 + add); return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+  const [siteFrom, setSiteFrom] = useState(() => roundUp(nowHM()));
+  const [siteTo, setSiteTo] = useState(() => roundUp(nowHM(), 120));
   const [pdf, setPdf] = useState(null); // { name, size, data }
   const pickPdf = (file) => {
     setMsg(null);
@@ -3453,7 +3457,7 @@ function AnnualLeave() {
   const submit = async (e) => {
     e.preventDefault();
     const to = data && data.approvers && data.approvers.length ? data.approvers.join(' or ') : 'your manager';
-    const body = { action: 'leaveRequest', type, start, end, note };
+    const body = type === 'site' ? { action: 'leaveRequest', type, from: siteFrom, to: siteTo, note } : { action: 'leaveRequest', type, start, end, note };
     if (type === 'sick' && pdf) body.attachment = { name: pdf.name, data: pdf.data };
     const ok = await run('request', body, (r) => (r.attachment === 'failed'
       ? `Request sent to ${to}, but the PDF could not be emailed — please give it to HR.`
@@ -3515,6 +3519,16 @@ function AnnualLeave() {
                 )}
               </div>
             )}
+            {type === 'site' ? (
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block"><span className="stamp text-ink-700/60">Today from</span>
+                  <input type="time" required value={siteFrom} step={900} onChange={(e) => setSiteFrom(e.target.value)} className={inputCls} />
+                </label>
+                <label className="block"><span className="stamp text-ink-700/60">Until</span>
+                  <input type="time" required value={siteTo} step={900} min={siteFrom} onChange={(e) => setSiteTo(e.target.value)} className={inputCls} />
+                </label>
+              </div>
+            ) : (
             <div className="grid grid-cols-2 gap-4">
               <label className="block"><span className="stamp text-ink-700/60">From</span>
                 <input type="date" required min={minStart} value={start}
@@ -3524,6 +3538,7 @@ function AnnualLeave() {
                 <input type="date" required min={start || minStart} value={end} onChange={(e) => setEnd(e.target.value)} className={inputCls} />
               </label>
             </div>
+            )}
             {type === 'sick' && (
               <div>
                 <span className="stamp text-ink-700/60">Medical report (PDF, optional)</span>
@@ -3542,7 +3557,13 @@ function AnnualLeave() {
               <input type="text" maxLength={300} value={note} required={type === 'site'} onChange={(e) => setNote(e.target.value)}
                 placeholder={type === 'site' ? 'e.g. Al Rawdah villa — site meeting' : 'e.g. family travel'} className={inputCls + ' placeholder:text-ink-700/40'} />
             </label>
-            {start && end && (
+            {type === 'site' && (
+              <p className={'text-sm ' + (siteTo <= siteFrom ? 'text-red-700' : 'text-ink-800/80')}>
+                {siteTo <= siteFrom ? 'The end time must be after the start time.'
+                  : `Today ${siteFrom}–${siteTo} at the site · counts as worked. You can check in or out from the site during these hours.`}
+              </p>
+            )}
+            {type !== 'site' && start && end && (
               <p className={'text-sm ' + (overLimit ? 'text-red-700' : 'text-ink-800/80')}>
                 {days === 0 ? 'No working days in these dates (weekends and public holidays don\'t count).'
                   : isAnnual ? `${days} working day${days === 1 ? '' : 's'} · ${Math.max(0, bal.remaining - days)} would remain`
@@ -3555,7 +3576,7 @@ function AnnualLeave() {
                 {skipped.length > 0 && <span className="block text-xs text-ink-800/60">Not counted: {skipped.join(', ')}</span>}
               </p>
             )}
-            <button type="submit" disabled={!!busy || !days || (type === 'site' && !note.trim()) || (isAnnual ? (days > bal.remaining && !bal.earning) : overLimit)} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+            <button type="submit" disabled={!!busy || (type === 'site' ? (!note.trim() || siteTo <= siteFrom) : (!days || (isAnnual ? (days > bal.remaining && !bal.earning) : overLimit)))} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
               {busy === 'request' ? 'Sending…' : 'Send to manager'}
             </button>
             <p className="text-center text-xs text-ink-800/60">
@@ -3731,8 +3752,10 @@ function ManagerDashboard() {
           ...r.rows.map((x) => [x.name, x.email, x.workingDays, x.present, x.hours, x.late, x.lateMinutes, x.lateDates.join(' '), x.noCheckout, x.absent, x.siteDays || 0, x.shortLeaveHours, x.shortLeaveOver, ...r.leaveTypes.filter((t) => t !== 'Site visit').map((t) => x.leave[t] || 0)])]);
       } else {
         const ds = r.rows[0] ? r.rows[0].daily.map((d) => d.date) : [];
-        downloadCsv(`ADAS-attendance-${tag}.csv`, [['Name', 'Email', ...ds.flatMap((d) => [`${d} status`, `${d} in`, `${d} out`, `${d} hours`])],
-          ...r.rows.map((x) => [x.name, x.email, ...x.daily.flatMap((d) => [chip(d.status).label || d.status, d.in || '', d.out || '', d.hours || ''])])]);
+        const mapUrl = (l) => (l ? `https://www.google.com/maps?q=${l.lat},${l.lng}` : '');
+        downloadCsv(`ADAS-attendance-${tag}.csv`, [['Name', 'Email', ...ds.flatMap((d) => [`${d} status`, `${d} in`, `${d} out`, `${d} hours`, `${d} in location`, `${d} out location`, `${d} note`])],
+          ...r.rows.map((x) => [x.name, x.email, ...x.daily.flatMap((d) => [chip(d.status).label || d.status, d.in || '', d.out || '', d.hours || '', mapUrl(d.inLoc), mapUrl(d.outLoc),
+            d.status === 'site' ? `${d.note}${d.siteFrom ? ` ${d.siteFrom}-${d.siteTo}` : ''}` : (d.note || '')])])]);
       }
     } else {
       downloadCsv(`ADAS-leave-${tag}.csv`, [['Name', 'Email', 'Type', 'Start', 'End', 'Days', 'Days in period', 'Status', 'Note'],
@@ -3777,10 +3800,20 @@ function ManagerDashboard() {
                 <div>
                   <p className="text-ink-900">{x.name}</p>
                   <p className="text-xs text-ink-800/60">
-                    {d.status === 'site' && <span>{d.note}{d.in ? ' · ' : d.noCheckin ? ' · no check-in yet' : ''}</span>}
+                    {d.status === 'site' && <span>{d.note}{d.siteFrom ? ` (${d.siteFrom}–${d.siteTo})` : ''}{d.in ? ' · ' : d.noCheckin ? ' · no check-in yet' : ''}</span>}
                     {d.in ? `${d.in}${d.out ? ` — ${d.out}` : ''}${d.hours ? ` · ${d.hours}h` : ''}${d.lateMin ? ` · ${d.lateMin} min late` : ''}${d.shortMin ? ` · ${d.shortMin} min short leave` : ''}` : (d.status === 'leave' ? 'Approved leave' : d.status === 'site' ? '' : d.note || '')}
                     {d.outNow && <span className="text-lilac-600"> · out since {d.outNow}</span>}
                   </p>
+                  {(d.inLoc || d.outLoc) && (
+                    <p className="mt-1 flex flex-wrap gap-3 text-xs">
+                      {[['In', d.inLoc], ['Out', d.outLoc]].filter(([, l]) => l).map(([k, l]) => (
+                        <a key={k} href={`https://www.google.com/maps?q=${l.lat},${l.lng}`} target="_blank" rel="noopener noreferrer"
+                          className="text-gold-700 underline-offset-2 hover:underline">
+                          📍 {k} · {l.distance >= 1000 ? `${(l.distance / 1000).toFixed(1)} km` : `${l.distance} m`} from office
+                        </a>
+                      ))}
+                    </p>
+                  )}
                 </div>
                 {c.label && <span className={'shrink-0 rounded-full px-2.5 py-1 text-[11px] ' + c.cls}>{d.status === 'leave' ? d.note : c.label}</span>}
               </li>); })}
@@ -4166,12 +4199,12 @@ function TeamPage() {
 
                 {today.site && (
                   <p className="mt-3 rounded-xl bg-bone-300/40 px-3 py-2 text-sm text-ink-900">
-                    Site visit today · {today.site.name}. You can check in and out from the site; late rules don't apply.
+                    Site visit today{today.site.from ? ` ${today.site.from}–${today.site.to}` : ''} · {today.site.name}. You can check in or out from the site during these hours{today.site.waiveLate ? '; late rules don\'t apply today' : ''}.
                   </p>
                 )}
                 {(() => {
                   const rules = today.rules;
-                  if (!rules || today.site) return null;
+                  if (!rules || (today.site && today.site.waiveLate)) return null;
                   const nowHM = clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' });
                   if (today.checkIn) {
                     return today.lateMin > 0
@@ -4189,7 +4222,7 @@ function TeamPage() {
                 ) : (
                   <div className="mt-8 grid grid-cols-2 gap-3">
                     <button onClick={() => punch('checkIn')} disabled={!!busy || !!today.checkIn
-                      || (!!today.rules && !today.site && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)}
+                      || (!!today.rules && !(today.site && today.site.waiveLate) && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)}
                       className={btnPair + ' bg-gold-400 text-ink-950 hover:bg-gold-300'}>
                       {busy === 'checkIn' ? 'Locating…' : 'Check in'}
                     </button>
@@ -4199,7 +4232,7 @@ function TeamPage() {
                     </button>
                   </div>
                 )}
-                {!today.checkIn && !(today.rules && !today.site && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)
+                {!today.checkIn && !(today.rules && !(today.site && today.site.waiveLate) && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)
                   && <p className="mt-3 text-center text-xs text-ink-700/60">Check out unlocks after you check in.</p>}
 
                 {me.perm && today.checkIn && !today.checkOut && (

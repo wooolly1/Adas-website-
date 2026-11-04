@@ -185,7 +185,7 @@ website code** — only into Vercel.
 | New baby | Up to 3 days per request; up to 7 days back |
 | Hajj | Up to 15 days, once, after 2 years' service |
 | Unpaid | No limit; manager decides |
-| Site visit | Work outside the office (site or client name required). Once approved: check in/out from the site (location recorded, any distance), no late or 11:00 rules, counts as worked — not leave, not absent, no balance used |
+| Site visit | Work outside the office **today, for chosen hours** (e.g. 11:00–14:00; site or client name required). Once approved: check in/out from the site from 1 hour before until 1 hour after (location recorded, any distance); a visit starting by 11:00 waives the late rule and the 11:00 cut-off; counts as worked, no balance used. An afternoon visit doesn't excuse missing the morning |
 
 Only Annual leave uses the annual balance. Every type goes to the same manager for approval.
 
@@ -200,6 +200,7 @@ On the Team page, managers see their team and HR/Admin see everyone, in two tabs
 - **Leave** — who is on leave (approved and pending) in the period, totals, and everyone's annual
   balance (for the year, carried, taken, pending, left).
 
+In the Day view each check-in / check-out has a **📍 map link** with its distance from the office.
 Every view has **Download for Excel** (CSV). Absent = a working day with no check-in and no approved
 leave, counted once check-in has closed (11:00).
 
