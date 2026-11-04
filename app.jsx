@@ -4026,7 +4026,7 @@ function TeamPage() {
                     </div>
                   ))}
                 </div>
-                {today.hours && <p className="mt-3 text-sm text-ink-800/70">Today: {today.hours} hours</p>}
+                {today.hours && <p className="mt-3 text-sm text-ink-800/70">Today: {today.hours} hours{today.shortLeaveMin > 0 && ` (${hm(today.shortLeaveMin)} short leave deducted)`}</p>}
 
                 {today.checkIn && today.checkOut ? (
                   <p className="mt-8 rounded-2xl bg-gold-400/10 p-4 text-center text-sm text-ink-800">You're done for today.</p>
