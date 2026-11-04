@@ -3398,7 +3398,7 @@ function leaveDays(start, end, holidays = []) {
   }
   return { days: n, skipped };
 }
-const LEAVE_LABELS = { annual: 'Annual', sick: 'Sick', marriage: 'Marriage', bereavement: 'Funeral', paternity: 'New baby', hajj: 'Hajj', unpaid: 'Unpaid' };
+const LEAVE_LABELS = { annual: 'Annual', sick: 'Sick', marriage: 'Marriage', bereavement: 'Funeral', paternity: 'New baby', hajj: 'Hajj', unpaid: 'Unpaid', site: 'Site visit' };
 const leaveTypeLabel = (t) => LEAVE_LABELS[t] || 'Annual';
 const fmtLeaveDate = (iso) => (iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
 const LEAVE_TONE = {
@@ -3493,7 +3493,7 @@ function AnnualLeave() {
           </div>
 
           <form onSubmit={submit} className="mt-8 space-y-5 border-t border-ink-900/10 pt-6">
-            <p className="font-display text-2xl text-ink-900">Request leave</p>
+            <p className="font-display text-2xl text-ink-900">{type === 'site' ? 'Request a site visit' : 'Request leave'}</p>
             {data.types && data.typeColumn && (
               <div>
                 <span className="stamp text-ink-700/60">Type</span>
@@ -3538,13 +3538,15 @@ function AnnualLeave() {
                 <p className="mt-1 text-xs text-ink-800/60">It's emailed to your manager with the request.</p>
               </div>
             )}
-            <label className="block"><span className="stamp text-ink-700/60">Note (optional)</span>
-              <input type="text" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. family travel" className={inputCls + ' placeholder:text-ink-700/40'} />
+            <label className="block"><span className="stamp text-ink-700/60">{type === 'site' ? 'Site / client (required)' : 'Note (optional)'}</span>
+              <input type="text" maxLength={300} value={note} required={type === 'site'} onChange={(e) => setNote(e.target.value)}
+                placeholder={type === 'site' ? 'e.g. Al Rawdah villa — site meeting' : 'e.g. family travel'} className={inputCls + ' placeholder:text-ink-700/40'} />
             </label>
             {start && end && (
               <p className={'text-sm ' + (overLimit ? 'text-red-700' : 'text-ink-800/80')}>
                 {days === 0 ? 'No working days in these dates (weekends and public holidays don\'t count).'
                   : isAnnual ? `${days} working day${days === 1 ? '' : 's'} · ${Math.max(0, bal.remaining - days)} would remain`
+                  : type === 'site' ? `${days} working day${days === 1 ? '' : 's'} at the site · counts as worked`
                   : `${days} working day${days === 1 ? '' : 's'} of ${typeInfo ? typeInfo.label.toLowerCase() : ''} leave · annual balance not affected`}
                 {!isAnnual && overLimit && ` — more than allowed (${typeLimit === Infinity ? '' : typeLimit + ' max'}).`}
                 {isAnnual && days > bal.remaining && (bal.earning
@@ -3553,7 +3555,7 @@ function AnnualLeave() {
                 {skipped.length > 0 && <span className="block text-xs text-ink-800/60">Not counted: {skipped.join(', ')}</span>}
               </p>
             )}
-            <button type="submit" disabled={!!busy || !days || (isAnnual ? (days > bal.remaining && !bal.earning) : overLimit)} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+            <button type="submit" disabled={!!busy || !days || (type === 'site' && !note.trim()) || (isAnnual ? (days > bal.remaining && !bal.earning) : overLimit)} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
               {busy === 'request' ? 'Sending…' : 'Send to manager'}
             </button>
             <p className="text-center text-xs text-ink-800/60">
@@ -3671,6 +3673,7 @@ const STATUS_UI = {
   absent: { label: 'Absent', short: 'A', cls: 'bg-red-500/15 text-red-700' },
   leave: { label: 'On leave', short: 'LV', cls: 'bg-ink-900/10 text-ink-800' },
   waiting: { label: 'Not in yet', short: '…', cls: 'bg-ink-900/5 text-ink-700/70' },
+  site: { label: 'Site visit', short: 'S', cls: 'bg-bone-300/60 text-ink-900' },
   off: { label: 'Off', short: '', cls: 'text-ink-700/30' },
   future: { label: '', short: '', cls: 'text-ink-700/30' },
   'not-joined': { label: '—', short: '', cls: 'text-ink-700/30' },
@@ -3724,8 +3727,8 @@ function ManagerDashboard() {
     const tag = `${period}-${r.from}`;
     if (tab === 'attendance') {
       if (period === 'month') {
-        downloadCsv(`ADAS-attendance-${tag}.csv`, [['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late', 'Late minutes', 'Late dates', 'No check-out', 'Absent', 'Short leave (h)', 'Short leave over', ...r.leaveTypes.map((t) => `${t} leave`)],
-          ...r.rows.map((x) => [x.name, x.email, x.workingDays, x.present, x.hours, x.late, x.lateMinutes, x.lateDates.join(' '), x.noCheckout, x.absent, x.shortLeaveHours, x.shortLeaveOver, ...r.leaveTypes.map((t) => x.leave[t] || 0)])]);
+        downloadCsv(`ADAS-attendance-${tag}.csv`, [['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late', 'Late minutes', 'Late dates', 'No check-out', 'Absent', 'Site visits', 'Short leave (h)', 'Short leave over', ...r.leaveTypes.filter((t) => t !== 'Site visit').map((t) => `${t} leave`)],
+          ...r.rows.map((x) => [x.name, x.email, x.workingDays, x.present, x.hours, x.late, x.lateMinutes, x.lateDates.join(' '), x.noCheckout, x.absent, x.siteDays || 0, x.shortLeaveHours, x.shortLeaveOver, ...r.leaveTypes.filter((t) => t !== 'Site visit').map((t) => x.leave[t] || 0)])]);
       } else {
         const ds = r.rows[0] ? r.rows[0].daily.map((d) => d.date) : [];
         downloadCsv(`ADAS-attendance-${tag}.csv`, [['Name', 'Email', ...ds.flatMap((d) => [`${d} status`, `${d} in`, `${d} out`, `${d} hours`])],
@@ -3763,7 +3766,7 @@ function ManagerDashboard() {
       {r && !busy && tab === 'attendance' && period === 'day' && (
         <>
           <div className="mt-5 flex flex-wrap gap-2">
-            {['ontime', 'late', 'absent', 'leave', 'waiting'].filter((k) => r.totals[k]).map((k) => (
+            {['ontime', 'late', 'site', 'absent', 'leave', 'waiting'].filter((k) => r.totals[k]).map((k) => (
               <span key={k} className={'rounded-full px-3 py-1 text-xs ' + chip(k).cls}>{chip(k).label} {r.totals[k]}</span>
             ))}
             {r.rows.some((x) => x.daily[0].outNow) && <span className="rounded-full bg-lilac-400/20 px-3 py-1 text-xs text-lilac-600">Out on short leave {r.rows.filter((x) => x.daily[0].outNow).length}</span>}
@@ -3774,7 +3777,8 @@ function ManagerDashboard() {
                 <div>
                   <p className="text-ink-900">{x.name}</p>
                   <p className="text-xs text-ink-800/60">
-                    {d.in ? `${d.in}${d.out ? ` — ${d.out}` : ''}${d.hours ? ` · ${d.hours}h` : ''}${d.lateMin ? ` · ${d.lateMin} min late` : ''}${d.shortMin ? ` · ${d.shortMin} min short leave` : ''}` : (d.status === 'leave' ? 'Approved leave' : d.note || '')}
+                    {d.status === 'site' && <span>{d.note}{d.in ? ' · ' : d.noCheckin ? ' · no check-in yet' : ''}</span>}
+                    {d.in ? `${d.in}${d.out ? ` — ${d.out}` : ''}${d.hours ? ` · ${d.hours}h` : ''}${d.lateMin ? ` · ${d.lateMin} min late` : ''}${d.shortMin ? ` · ${d.shortMin} min short leave` : ''}` : (d.status === 'leave' ? 'Approved leave' : d.status === 'site' ? '' : d.note || '')}
                     {d.outNow && <span className="text-lilac-600"> · out since {d.outNow}</span>}
                   </p>
                 </div>
@@ -3805,7 +3809,7 @@ function ManagerDashboard() {
               ))}
             </tbody>
           </table>
-          <p className="mt-3 text-xs text-ink-800/60">✓ on time · L late · A absent · LV on leave · … not in yet{r.holidays.length ? ` · holiday: ${r.holidays.map((h) => h.name).join(', ')}` : ''}</p>
+          <p className="mt-3 text-xs text-ink-800/60">✓ on time · L late · S site visit · A absent · LV on leave · … not in yet{r.holidays.length ? ` · holiday: ${r.holidays.map((h) => h.name).join(', ')}` : ''}</p>
         </div>
       )}
 
@@ -3817,13 +3821,14 @@ function ManagerDashboard() {
                 <span className="text-ink-900">{x.name}</span>
                 <span className="flex shrink-0 gap-3 text-xs text-ink-800/70">
                   <span>{x.present}/{x.workingDays} days</span><span>{x.hours}h</span>
+                  {x.siteDays > 0 && <span>{x.siteDays} site</span>}
                   {x.late > 0 && <span className="text-lilac-600">{x.late} late</span>}
                   {x.absent > 0 && <span className="text-red-700">{x.absent} absent</span>}
                 </span>
               </button>
               {open === x.email && (
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                  {[['Present', `${x.present} of ${x.workingDays}`], ['Hours', x.hours], ['Late', `${x.late} · ${x.lateMinutes} min`], ['No check-out', x.noCheckout], ['Absent', x.absent],
+                  {[['Present', `${x.present} of ${x.workingDays}`], ['Hours', x.hours], ['Late', `${x.late} · ${x.lateMinutes} min`], ['No check-out', x.noCheckout], ['Absent', x.absent], ['Site visits', x.siteDays || 0],
                     ['Short leave', `${x.shortLeaveHours}h${x.shortLeaveOver ? ` · ${x.shortLeaveOver} over` : ''}`], ...Object.entries(x.leave).map(([t, v]) => [`${t} leave`, `${v}d`])].map(([k, v]) => (
                     <div key={k} className="rounded-xl border border-ink-900/10 p-2.5"><p className="stamp text-[9px] text-ink-700/50">{k}</p><p className="mt-1 text-sm text-ink-900">{v}</p></div>
                   ))}
@@ -3842,16 +3847,17 @@ function ManagerDashboard() {
               <div key={k} className="rounded-2xl border border-ink-900/10 p-3 text-center"><p className="font-display text-3xl text-ink-900">{v}</p><p className="mt-1 text-xs text-ink-800/60">{k}</p></div>
             ))}
           </div>
-          <p className="mt-6 stamp text-ink-700/60">{period === 'day' ? 'On leave' : 'Leave in this period'}</p>
+          {r.totals.siteVisits > 0 && <p className="mt-3 text-xs text-ink-800/60">Plus {r.totals.siteVisits} site visit{r.totals.siteVisits === 1 ? '' : 's'} (counted as worked, not leave).</p>}
+          <p className="mt-6 stamp text-ink-700/60">{period === 'day' ? 'On leave or on site' : 'Leave and site visits in this period'}</p>
           {r.entries.length === 0 ? <p className="mt-2 text-sm text-ink-800/70">No leave {period === 'day' ? 'on this day' : 'in this period'}.</p> : (
             <ul className="mt-2 divide-y divide-ink-900/10">
               {r.entries.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-3 py-2.5">
                   <div>
                     <p className="text-ink-900">{e.name} <span className="ml-1 rounded-full bg-ink-900/5 px-2 py-0.5 text-[11px] text-ink-800/70">{e.type}</span></p>
-                    <p className="text-xs text-ink-800/60">{fmtD(e.start, { day: 'numeric', month: 'short' })}{e.end !== e.start && ` — ${fmtD(e.end, { day: 'numeric', month: 'short' })}`} · {e.days}d{e.daysInPeriod !== e.days ? ` (${e.daysInPeriod} in this ${period})` : ''}</p>
+                    <p className="text-xs text-ink-800/60">{fmtD(e.start, { day: 'numeric', month: 'short' })}{e.end !== e.start && ` — ${fmtD(e.end, { day: 'numeric', month: 'short' })}`} · {e.days}d{e.daysInPeriod !== e.days ? ` (${e.daysInPeriod} in this ${period})` : ''}{e.work && e.note ? ` · ${e.note}` : ''}</p>
                   </div>
-                  <span className={'shrink-0 rounded-full px-2.5 py-1 text-[11px] ' + (/^approved$/i.test(e.status) ? 'bg-gold-400/20 text-gold-700' : 'bg-lilac-400/20 text-lilac-600')}>{e.status}</span>
+                  <span className={'shrink-0 rounded-full px-2.5 py-1 text-[11px] ' + (/^approved$/i.test(e.status) ? (e.work ? 'bg-bone-300/60 text-ink-900' : 'bg-gold-400/20 text-gold-700') : 'bg-lilac-400/20 text-lilac-600')}>{e.status}</span>
                 </li>
               ))}
             </ul>
@@ -4158,9 +4164,14 @@ function TeamPage() {
                 </div>
                 {today.hours && <p className="mt-3 text-sm text-ink-800/70">Today: {today.hours} hours{today.shortLeaveMin > 0 && ` (${hm(today.shortLeaveMin)} short leave deducted)`}</p>}
 
+                {today.site && (
+                  <p className="mt-3 rounded-xl bg-bone-300/40 px-3 py-2 text-sm text-ink-900">
+                    Site visit today · {today.site.name}. You can check in and out from the site; late rules don't apply.
+                  </p>
+                )}
                 {(() => {
                   const rules = today.rules;
-                  if (!rules) return null;
+                  if (!rules || today.site) return null;
                   const nowHM = clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' });
                   if (today.checkIn) {
                     return today.lateMin > 0
@@ -4178,7 +4189,7 @@ function TeamPage() {
                 ) : (
                   <div className="mt-8 grid grid-cols-2 gap-3">
                     <button onClick={() => punch('checkIn')} disabled={!!busy || !!today.checkIn
-                      || (!!today.rules && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)}
+                      || (!!today.rules && !today.site && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)}
                       className={btnPair + ' bg-gold-400 text-ink-950 hover:bg-gold-300'}>
                       {busy === 'checkIn' ? 'Locating…' : 'Check in'}
                     </button>
@@ -4188,7 +4199,7 @@ function TeamPage() {
                     </button>
                   </div>
                 )}
-                {!today.checkIn && !(today.rules && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)
+                {!today.checkIn && !(today.rules && !today.site && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)
                   && <p className="mt-3 text-center text-xs text-ink-700/60">Check out unlocks after you check in.</p>}
 
                 {me.perm && today.checkIn && !today.checkOut && (
