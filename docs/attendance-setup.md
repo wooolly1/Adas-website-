@@ -220,3 +220,27 @@ the day; time beyond what was approved is marked `Over approved time by N min`. 
 stepped out closes it at check-out time. Short leave actually taken (stepped out and back) is
 **deducted from that day's `Hours`** in the Attendance table; requests that were never used are not. Change the limits with `PERMISSION_DAY_MIN` (default 90)
 and `PERMISSION_WEEK_MIN` (default 360) in Vercel. Without the table, the buttons don't appear.
+
+### Phone notifications (installable app)
+
+The Team page is an installable app (`manifest.webmanifest`, service worker `sw.js`). Staff install it
+once and tap **Turn on notifications**:
+
+- **iPhone (iOS 16.4+):** open adas.com.sa/#/team in **Safari** → Share → **Add to Home Screen** → open
+  **ADAS** from the Home Screen → sign in → **Turn on notifications** → Allow. (iPhone only allows web
+  notifications from the Home Screen app, and it has its own sign-in separate from Safari.)
+- **Android / computers:** open the Team page in Chrome or Edge → **Install app** (or menu → Add to
+  Home screen) → **Turn on notifications**.
+
+Who gets what: managers — new leave, site-visit and short-leave requests; staff — approvals,
+declines and cancellations; everyone — **"Check-in closes at 11:00"** (10:30, if not checked in and
+not on leave) and **"Don't forget to check out"** (18:30, if still checked in), Sun–Thu, not on holidays.
+
+Setup (once):
+1. Excel: add a table **`Devices`** with `Email · Endpoint · P256dh · Auth · Added · Device`.
+2. Vercel → Settings → Environment Variables: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+   `VAPID_SUBJECT` (`mailto:office@adas.com.sa`) and `CRON_SECRET` (any long random text) → Redeploy.
+   Treat `VAPID_PRIVATE_KEY` and `CRON_SECRET` like passwords. If `VAPID_PRIVATE_KEY` is ever changed,
+   everyone has to turn notifications on again.
+3. Reminders run from `vercel.json` (`crons`): 07:30 and 15:30 UTC = 10:30 and 18:30 Riyadh. On the
+   Hobby plan Vercel may run them up to an hour late; on Pro they run on time.

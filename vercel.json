@@ -3,5 +3,15 @@
   "framework": null,
   "buildCommand": null,
   "installCommand": null,
-  "outputDirectory": "."
+  "outputDirectory": ".",
+  "crons": [
+    {
+      "path": "/api/attendance?cron=checkin",
+      "schedule": "30 7 * * 0-4"
+    },
+    {
+      "path": "/api/attendance?cron=checkout",
+      "schedule": "30 15 * * 0-4"
+    }
+  ]
 }

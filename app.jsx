@@ -4081,6 +4081,94 @@ function ShortLeaveQueue() {
   );
 }
 
+/* Phone notifications (Web Push). iPhone: only works from the Home Screen app. */
+const urlB64ToBytes = (b64) => { const p = '='.repeat((4 - (b64.length % 4)) % 4); const raw = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))); };
+function NotificationsCard({ pushKey }) {
+  const supported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const standalone = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
+  const [state, setState] = useState('checking'); // checking | off | on | denied
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    if (!supported) { setState('off'); return; }
+    navigator.serviceWorker.register('/sw.js').then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setState(Notification.permission === 'denied' ? 'denied' : sub ? 'on' : 'off'))
+      .catch(() => setState('off'));
+  }, []);
+
+  if (!pushKey) return null; // not set up on the server yet
+  const deviceName = /iPhone/.test(navigator.userAgent) ? 'iPhone' : /iPad/.test(navigator.userAgent) ? 'iPad' : /Android/.test(navigator.userAgent) ? 'Android' : /Mac/.test(navigator.userAgent) ? 'Mac' : /Windows/.test(navigator.userAgent) ? 'Windows' : 'Browser';
+
+  const turnOn = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { setState(perm === 'denied' ? 'denied' : 'off'); return; }
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(pushKey) });
+      const r = await attCall('pushSubscribe', { subscription: sub.toJSON(), device: deviceName });
+      if (!r.ok) throw new Error(r.error);
+      setState('on'); setMsg({ type: 'ok', text: 'Notifications are on for this device.' });
+    } catch (e) { setMsg({ type: 'error', text: e.message || 'Could not turn on notifications.' }); }
+    finally { setBusy(false); }
+  };
+  const turnOff = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) { await attCall('pushUnsubscribe', { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
+      setState('off');
+    } finally { setBusy(false); }
+  };
+  const test = async () => {
+    setBusy(true); setMsg(null);
+    const r = await attCall('pushTest').catch(() => ({ ok: false }));
+    setMsg(r.ok && r.sent ? { type: 'ok', text: 'Test sent — it should appear in a few seconds.' } : { type: 'error', text: r.error || 'No device received it. Try turning notifications off and on again.' });
+    setBusy(false);
+  };
+  const btn = 'magnetic-btn inline-flex items-center justify-center rounded-full px-5 py-3 text-[11px] uppercase tracking-[0.18em] transition disabled:opacity-40';
+
+  return (
+    <div className="glass mt-6 rounded-3xl p-6 shadow-soft md:p-10">
+      <p className="stamp text-gold-600">Notifications</p>
+      {isIOS && !standalone ? (
+        <div className="mt-3 text-sm leading-relaxed text-ink-800">
+          <p>To get notifications on iPhone, install the app first:</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-800/80">
+            <li>Tap <span className="font-medium text-ink-900">Share</span> <span aria-hidden="true">⬆︎</span> at the bottom of Safari</li>
+            <li>Choose <span className="font-medium text-ink-900">Add to Home Screen</span>, then <span className="font-medium text-ink-900">Add</span></li>
+            <li>Open <span className="font-medium text-ink-900">ADAS</span> from your Home Screen and turn notifications on here</li>
+          </ol>
+        </div>
+      ) : !supported ? (
+        <p className="mt-3 text-sm text-ink-800/80">This browser can't show notifications. Use Chrome, Edge or Safari (from the Home Screen on iPhone).</p>
+      ) : state === 'denied' ? (
+        <p className="mt-3 text-sm text-ink-800/80">Notifications are blocked for ADAS. Turn them on in your phone's <span className="font-medium text-ink-900">Settings → Notifications → ADAS</span> (or the browser's site settings), then come back.</p>
+      ) : state === 'on' ? (
+        <>
+          <p className="mt-3 text-sm text-ink-800">On for this device — you'll be told about approvals, new requests and check-in / check-out reminders.</p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button onClick={test} disabled={busy} className={btn + ' border border-ink-900/15 text-ink-900 hover:border-gold-400'}>Send a test</button>
+            <button onClick={turnOff} disabled={busy} className={btn + ' border border-ink-900/15 text-ink-700/70 hover:border-red-500 hover:text-red-700'}>Turn off</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-3 text-sm text-ink-800">Get alerts for approvals, new requests and reminders to check in and out.</p>
+          <button onClick={turnOn} disabled={busy || state === 'checking'} className={btn + ' mt-4 w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+            {busy ? 'Turning on…' : 'Turn on notifications'}
+          </button>
+        </>
+      )}
+      {msg && <p role="status" className={'mt-4 rounded-xl p-3 text-sm ' + (msg.type === 'error' ? 'bg-red-500/10 text-red-700' : 'bg-gold-400/10 text-ink-800')}>{msg.text}</p>}
+    </div>
+  );
+}
+
 function TeamPage() {
   const [step, setStep] = useState('loading'); // loading | signin | home
   const [me, setMe] = useState(null);           // { name, email, today }
@@ -4255,6 +4343,7 @@ function TeamPage() {
               </p>
             )}
           </div>
+          {step === 'home' && me && <NotificationsCard pushKey={me.pushKey} />}
           {step === 'home' && me && <ShortLeaveQueue />}
           {step === 'home' && me && <AnnualLeave />}
           {step === 'home' && me && <ManagerDashboard />}
