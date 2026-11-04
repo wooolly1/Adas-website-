@@ -214,7 +214,7 @@ Set `Date`, `Out` and `In` to *Text*. **With approval:** while checked in, staff
 (15–90 min) and an optional reason and tap **Request to step out**; their manager is emailed and
 approves or declines in **Short leave requests** on the Team page. Once approved, staff tap
 **Step out** and **Back in** (both check they're at the office). Unused approvals expire at the end of
-the day; time beyond what was approved is marked `Over approved time by N min`. Limits: **1.5 hours a day** and **6 hours a week**
+the day; time beyond what was approved is marked `Over approved time by N min`. Limits: **once a day**, up to **1.5 hours**, and **6 hours a week**
 (Sun–Thu) — Step out is blocked when used up, and time beyond the limit is marked
 `Over limit by N min` in `Status`. Checking out while
 stepped out closes it at check-out time. Short leave actually taken (stepped out and back) is
