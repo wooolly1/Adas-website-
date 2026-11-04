@@ -730,62 +730,134 @@ async function closeOpenPerm(perms, email, time) {
  * today) with no check-in and no approved leave. */
 const toMin = (hm) => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
 
-async function handleReport(b, staff, team) {
-  const month = /^\d{4}-\d{2}$/.test(String(b.month || '')) ? b.month : riyadh().day.slice(0, 7);
+/** Period from the request: { period: 'day'|'week'|'month', date: 'YYYY-MM-DD' } (or legacy { month }). */
+function periodRange(b) {
+  const today = riyadh().day;
+  const kind = ['day', 'week', 'month'].includes(b.period) ? b.period : 'month';
+  let date = isoDay(b.date) ? b.date : (/^\d{4}-\d{2}$/.test(String(b.month || '')) ? `${b.month}-01` : today);
+  let from, to;
+  if (kind === 'day') { from = to = date; }
+  else if (kind === 'week') {
+    from = weekStart(date);
+    const e = new Date(from + 'T00:00:00Z'); e.setUTCDate(e.getUTCDate() + 6); to = e.toISOString().slice(0, 10);
+  } else {
+    const [y, m] = date.split('-').map(Number);
+    from = `${date.slice(0, 7)}-01`; to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  }
+  const days = [];
+  for (let d = new Date(from + 'T00:00:00Z'); d <= new Date(to + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) days.push(d.toISOString().slice(0, 10));
+  return { kind, date, from, to, today, days, until: to < today ? to : today };
+}
+
+function reportScope(staff, team) {
   const scope = team.filter((s) => s.active && (staff.admin || canDecide(staff, s, team)));
   if (!staff.admin && !scope.length) throw new HttpError(403, 'Reports are for managers.');
-  const [att, leave, holidays, perms] = await Promise.all([
-    tableRows('Attendance'),
-    allLeave().catch(() => []),
-    holidayList(),
-    allPerms().catch(() => []),
-  ]);
-  const holidaySet = new Set(holidays.map((h) => h.date));
-  const today = riyadh().day;
-  const [y, m] = month.split('-').map(Number);
-  const first = `${month}-01`, lastDay = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-  const until = lastDay < today ? lastDay : today;
-  const { lateAfterMin: lateAfter, startMin } = dayRules();
+  return scope;
+}
 
-  const workdays = [];
-  for (let d = new Date(first + 'T00:00:00Z'); d <= new Date(until + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
-    const iso = d.toISOString().slice(0, 10), w = d.getUTCDay();
-    if (w !== 5 && w !== 6 && !holidaySet.has(iso)) workdays.push(iso);
-  }
+async function handleReport(b, staff, team) {
+  const scope = reportScope(staff, team);
+  const range = periodRange(b);
+  const { from, to, today, days } = range;
+  const [att, leave, holidays, perms] = await Promise.all([
+    tableRows('Attendance'), allLeave().catch(() => []), holidayList(), allPerms().catch(() => []),
+  ]);
+  const holidayName = Object.fromEntries(holidays.map((h) => [h.date, h.name || 'Public holiday']));
+  const rules = dayRules();
+  const nowMin = toMin(riyadh().time);
+  const isWorkday = (d) => { const w = new Date(d + 'T00:00:00Z').getUTCDay(); return w !== 5 && w !== 6 && !holidayName[d]; };
+  // a day is "due" (could be absent) once check-in has closed
+  const isOver = (d) => d < today || (d === today && nowMin > rules.closesMin);
+
   const byPerson = {};
   for (const row of att) {
-    const day = cellDay(row[0]); if (day < first || day > lastDay) continue;
+    const day = cellDay(row[0]); if (day < from || day > to) continue;
     const email = String(row[1]).trim().toLowerCase();
     (byPerson[email] = byPerson[email] || {})[day] = { in: cellTime(row[3]), out: row[8] === '' ? '' : cellTime(row[8]), hours: Number(row[13]) || 0 };
   }
+  const label = (k) => (LEAVE_TYPES[k] || LEAVE_TYPES.annual).label;
+
   const rows = scope.map((s) => {
-    const days = byPerson[s.email] || {};
-    const mine = leave.filter((l) => l.email === s.email && /^approved$/i.test(l.status) && l.start <= lastDay && l.end >= first);
-    const onLeave = new Set(), leaveByType = {};
-    for (const l of mine) {
-      for (const d of workdays) if (d >= l.start && d <= l.end) { onLeave.add(d); leaveByType[l.type] = (leaveByType[l.type] || 0) + 1; }
-    }
-    const due = workdays.filter((d) => !s.joinDate || d >= s.joinDate);
-    const present = Object.keys(days).filter((d) => days[d].in);
-    const lateDays = present.filter((d) => toMin(days[d].in) > lateAfter).sort();
+    const att1 = byPerson[s.email] || {};
+    const myLeave = leave.filter((l) => l.email === s.email && /^approved$/i.test(l.status) && l.start <= to && l.end >= from);
+    const myPerms = perms.filter((p) => p.email === s.email && p.date >= from && p.date <= to);
+    const leaveOn = (d) => myLeave.find((l) => d >= l.start && d <= l.end);
+    const daily = days.map((d) => {
+      const a = att1[d], lv = leaveOn(d);
+      const out = { date: d };
+      if (s.joinDate && d < s.joinDate) return { ...out, status: 'not-joined' };
+      if (a && a.in) {
+        const late = toMin(a.in) > rules.lateAfterMin ? toMin(a.in) - rules.startMin : 0;
+        const openPerm = d === today && myPerms.find((p) => p.date === d && p.out && !p.in);
+        return { ...out, status: late ? 'late' : 'ontime', in: a.in, out: a.out, hours: a.hours, lateMin: late,
+          shortMin: myPerms.filter((p) => p.date === d && p.in).reduce((x, p) => x + p.minutes, 0), outNow: openPerm ? openPerm.out : '' };
+      }
+      if (!isWorkday(d)) return { ...out, status: 'off', note: holidayName[d] || 'Weekend' };
+      if (lv) return { ...out, status: 'leave', note: label(lv.type) };
+      if (d > today) return { ...out, status: 'future' };
+      if (!isOver(d)) return { ...out, status: 'waiting' };
+      return { ...out, status: 'absent' };
+    });
+    const worked = daily.filter((x) => x.status === 'ontime' || x.status === 'late');
+    const leaveByType = {};
+    for (const x of daily) if (x.status === 'leave') leaveByType[x.note] = (leaveByType[x.note] || 0) + 1;
     return {
       name: s.name || s.email, email: s.email,
-      workingDays: due.length,
-      present: present.length,
-      hours: Math.round(present.reduce((a, d) => a + days[d].hours, 0) * 10) / 10,
-      late: lateDays.length,
-      lateDates: lateDays.map((d) => `${d.slice(8)} (${days[d].in})`),
-      lateMinutes: lateDays.reduce((a, d) => a + (toMin(days[d].in) - startMin), 0),
-      noCheckout: present.filter((d) => !days[d].out && d < today).length,
-      absent: due.filter((d) => !days[d] && !onLeave.has(d) && d < today).length,
-      shortLeaveHours: Math.round(perms.filter((p) => p.email === s.email && p.date >= first && p.date <= lastDay).reduce((a, p) => a + p.minutes, 0) / 6) / 10,
-      shortLeaveOver: perms.filter((p) => p.email === s.email && p.date >= first && p.date <= lastDay && /^over/i.test(p.status)).length,
-      leave: Object.fromEntries(Object.entries(leaveByType).map(([k, v]) => [(LEAVE_TYPES[k] || LEAVE_TYPES.annual).label, v])),
+      workingDays: daily.filter((x) => x.date <= range.until && x.status !== 'off' && x.status !== 'not-joined' && x.status !== 'future').length,
+      present: worked.length,
+      hours: Math.round(worked.reduce((a, x) => a + x.hours, 0) * 10) / 10,
+      late: worked.filter((x) => x.lateMin).length,
+      lateDates: worked.filter((x) => x.lateMin).map((x) => `${x.date.slice(8)} (${x.in})`),
+      lateMinutes: worked.reduce((a, x) => a + (x.lateMin || 0), 0),
+      noCheckout: worked.filter((x) => !x.out && x.date < today).length,
+      absent: daily.filter((x) => x.status === 'absent').length,
+      shortLeaveHours: Math.round(myPerms.reduce((a, p) => a + p.minutes, 0) / 6) / 10,
+      shortLeaveOver: myPerms.filter((p) => /^over/i.test(p.status)).length,
+      leave: leaveByType,
+      daily: range.kind === 'month' ? undefined : daily,
     };
   }).sort((a, b2) => a.name.localeCompare(b2.name));
-  return { ok: true, month, from: first, to: until, workStart: env('WORK_START', '09:00'), graceMin: Number(env('LATE_GRACE_MIN', '15')),
-    lateAfter: dayRules().lateAfter, closes: dayRules().closes,
-    leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label), rows };
+
+  const totals = rows.reduce((t, r) => {
+    const last = r.daily ? r.daily[r.daily.length - 1] : null;
+    if (range.kind === 'day' && last) t[last.status] = (t[last.status] || 0) + 1;
+    return t;
+  }, {});
+  return { ok: true, period: range.kind, date: range.date, from, to, until: range.until, month: from.slice(0, 7),
+    workStart: rules.workStart, graceMin: Number(env('LATE_GRACE_MIN', '15')), lateAfter: rules.lateAfter, closes: rules.closes,
+    leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label), holidays: days.filter((d) => holidayName[d]).map((d) => ({ date: d, name: holidayName[d] })),
+    totals, rows };
+}
+
+/** Leave dashboard for a day / week / month: who is on leave, pending requests, balances. */
+async function handleLeaveReport(b, staff, team) {
+  const scope = reportScope(staff, team);
+  const range = periodRange(b);
+  const { from, to } = range;
+  const [leave, holidays] = await Promise.all([allLeave(), holidayList()]);
+  const holidaySet = new Set(holidays.map((h) => h.date));
+  const inScope = new Set(scope.map((s) => s.email));
+  const label = (k) => (LEAVE_TYPES[k] || LEAVE_TYPES.annual).label;
+  const clip = (l) => workingDays(l.start < from ? from : l.start, l.end > to ? to : l.end, holidaySet);
+  const entries = leave.filter((l) => inScope.has(l.email) && /^(approved|pending)$/i.test(l.status) && l.start <= to && l.end >= from)
+    .sort((x, y) => x.start.localeCompare(y.start))
+    .map((l) => ({ id: l.id, name: l.name || l.email, email: l.email, type: label(l.type), start: l.start, end: l.end,
+      days: l.days, daysInPeriod: clip(l), status: l.status, note: l.note }));
+  const year = Number(from.slice(0, 4));
+  const people = scope.map((s) => {
+    const bal = balanceFor(s, leave, year);
+    const mine = entries.filter((e) => e.email === s.email && /^approved$/i.test(e.status));
+    const byType = {};
+    for (const e of mine) byType[e.type] = (byType[e.type] || 0) + e.daysInPeriod;
+    return { name: s.name || s.email, email: s.email, joinDate: s.joinDate || '',
+      entitlement: bal.entitlement, carried: bal.carried, allowance: bal.allowance, used: bal.used, pending: bal.pending, remaining: bal.remaining,
+      inPeriod: byType, pendingInPeriod: entries.filter((e) => e.email === s.email && /^pending$/i.test(e.status)).length };
+  }).sort((a, b2) => a.name.localeCompare(b2.name));
+  const onLeave = range.kind === 'day' ? entries.filter((e) => /^approved$/i.test(e.status)) : [];
+  return { ok: true, period: range.kind, date: range.date, from, to, year, entries, people, onLeave,
+    totals: { approvedDays: entries.filter((e) => /^approved$/i.test(e.status)).reduce((a, e) => a + e.daysInPeriod, 0),
+      pending: entries.filter((e) => /^pending$/i.test(e.status)).length, people: new Set(entries.filter((e) => /^approved$/i.test(e.status)).map((e) => e.email)).size },
+    leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label) };
 }
 
 /* --------------------------------------------------------------- handler */
@@ -942,6 +1014,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (b.action === 'report') return res.status(200).json(await handleReport(b, staff, team));
+    if (b.action === 'leaveReport') return res.status(200).json(await handleLeaveReport(b, staff, team));
 
     if (String(b.action || '').startsWith('leave')) {
       return res.status(200).json(await handleLeave(b, staff, name, team));
@@ -956,4 +1029,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = { maxDuration: 15 };
-module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay, leaveTypeKey, permSummary, weekStart };
+module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay, leaveTypeKey, permSummary, weekStart, periodRange };

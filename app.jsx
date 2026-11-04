@@ -3665,85 +3665,215 @@ function AnnualLeave() {
   );
 }
 
-function MonthlyReport() {
-  const thisMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' }).slice(0, 7);
-  const [month, setMonth] = useState(thisMonth);
+const STATUS_UI = {
+  ontime: { label: 'On time', short: '✓', cls: 'bg-gold-400/20 text-gold-700' },
+  late: { label: 'Late', short: 'L', cls: 'bg-lilac-400/25 text-lilac-600' },
+  absent: { label: 'Absent', short: 'A', cls: 'bg-red-500/15 text-red-700' },
+  leave: { label: 'On leave', short: 'LV', cls: 'bg-ink-900/10 text-ink-800' },
+  waiting: { label: 'Not in yet', short: '…', cls: 'bg-ink-900/5 text-ink-700/70' },
+  off: { label: 'Off', short: '', cls: 'text-ink-700/30' },
+  future: { label: '', short: '', cls: 'text-ink-700/30' },
+  'not-joined': { label: '—', short: '', cls: 'text-ink-700/30' },
+};
+const isoShift = (iso, period, n) => {
+  const d = new Date(iso + 'T00:00:00Z');
+  if (period === 'month') { d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); }
+  else d.setUTCDate(d.getUTCDate() + n * (period === 'week' ? 7 : 1));
+  return d.toISOString().slice(0, 10);
+};
+const fmtD = (iso, opts) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', ...opts });
+function downloadCsv(name, rows) {
+  const esc = (v) => { const x = String(v == null ? '' : v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+  const blob = new Blob(['﻿' + rows.map((r) => r.map(esc).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function ManagerDashboard() {
+  const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
+  const [tab, setTab] = useState('attendance');
+  const [period, setPeriod] = useState('day');
+  const [date, setDate] = useState(todayIso);
   const [rep, setRep] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(null);
 
   useEffect(() => {
     let live = true;
     setBusy(true); setErr('');
-    attCall('report', { month }).then((r) => {
+    attCall(tab === 'attendance' ? 'report' : 'leaveReport', { period, date }).then((r) => {
       if (!live) return;
-      if (r.ok) setRep(r); else { setRep(null); if (r.error !== 'Reports are for managers.') setErr(r.error); }
+      if (r.ok) setRep({ ...r, tab }); else if (r.error === 'Reports are for managers.') setHidden(true); else { setRep(null); setErr(r.error); }
     }).catch(() => live && setErr('Connection problem. Please try again.')).finally(() => live && setBusy(false));
     return () => { live = false; };
-  }, [month]);
+  }, [tab, period, date]);
 
-  if (!rep && !err && !busy) return null; // not a manager
-  const types = rep ? rep.leaveTypes.filter((t) => rep.rows.some((r) => r.leave[t])) : [];
+  if (hidden) return null;
+  const canNext = isoShift(date, period, 1) <= todayIso || (tab === 'leave');
+  const title = period === 'day' ? fmtD(date, { weekday: 'long', day: 'numeric', month: 'long' })
+    : period === 'week' ? (rep ? `${fmtD(rep.from, { day: 'numeric', month: 'short' })} — ${fmtD(isoShift(rep.from, 'day', 4), { day: 'numeric', month: 'short' })}` : 'This week')
+    : fmtD(date, { month: 'long', year: 'numeric' });
+  const seg = (on) => 'rounded-full px-4 py-1.5 text-sm transition ' + (on ? 'bg-ink-900 text-bone-100' : 'text-ink-800/70 hover:text-ink-900');
+  const chip = (st) => STATUS_UI[st] || STATUS_UI.future;
+  const r = rep && rep.tab === tab ? rep : null;
 
-  const download = () => {
-    const head = ['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late arrivals', 'Late minutes', 'Late dates', 'No check-out', 'Absent', 'Short leave (h)', 'Short leave over limit', ...rep.leaveTypes.map((t) => `${t} leave`)];
-    const esc = (v) => { const x = String(v == null ? '' : v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
-    const lines = [head, ...rep.rows.map((r) => [r.name, r.email, r.workingDays, r.present, r.hours, r.late, r.lateMinutes || 0, r.lateDates.join(' '), r.noCheckout, r.absent, r.shortLeaveHours || 0, r.shortLeaveOver || 0,
-      ...rep.leaveTypes.map((t) => r.leave[t] || 0)])].map((row) => row.map(esc).join(','));
-    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ADAS-attendance-${rep.month}.csv`;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  const exportCsv = () => {
+    if (!r) return;
+    const tag = `${period}-${r.from}`;
+    if (tab === 'attendance') {
+      if (period === 'month') {
+        downloadCsv(`ADAS-attendance-${tag}.csv`, [['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late', 'Late minutes', 'Late dates', 'No check-out', 'Absent', 'Short leave (h)', 'Short leave over', ...r.leaveTypes.map((t) => `${t} leave`)],
+          ...r.rows.map((x) => [x.name, x.email, x.workingDays, x.present, x.hours, x.late, x.lateMinutes, x.lateDates.join(' '), x.noCheckout, x.absent, x.shortLeaveHours, x.shortLeaveOver, ...r.leaveTypes.map((t) => x.leave[t] || 0)])]);
+      } else {
+        const ds = r.rows[0] ? r.rows[0].daily.map((d) => d.date) : [];
+        downloadCsv(`ADAS-attendance-${tag}.csv`, [['Name', 'Email', ...ds.flatMap((d) => [`${d} status`, `${d} in`, `${d} out`, `${d} hours`])],
+          ...r.rows.map((x) => [x.name, x.email, ...x.daily.flatMap((d) => [chip(d.status).label || d.status, d.in || '', d.out || '', d.hours || ''])])]);
+      }
+    } else {
+      downloadCsv(`ADAS-leave-${tag}.csv`, [['Name', 'Email', 'Type', 'Start', 'End', 'Days', 'Days in period', 'Status', 'Note'],
+        ...r.entries.map((e) => [e.name, e.email, e.type, e.start, e.end, e.days, e.daysInPeriod, e.status, e.note]),
+        [], ['Balances ' + r.year, '', 'For year', 'Carried', 'Total', 'Taken', 'Pending', 'Left', 'Joined'],
+        ...r.people.map((x) => [x.name, x.email, x.entitlement, x.carried, x.allowance, x.used, x.pending, x.remaining, x.joinDate])]);
+    }
   };
-  const monthLabel = new Date(month + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   return (
     <div className="glass mt-6 rounded-3xl p-6 shadow-soft md:p-10">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="stamp text-gold-600">Monthly report</p>
-          <p className="mt-2 font-display text-2xl text-ink-900">{monthLabel}</p>
+      <p className="stamp text-gold-600">Manager dashboard</p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex rounded-full border border-ink-900/10 p-1">
+          {[['attendance', 'Attendance'], ['leave', 'Leave']].map(([k, l]) => <button key={k} onClick={() => { setTab(k); setOpen(null); }} className={seg(tab === k)}>{l}</button>)}
         </div>
-        <input type="month" value={month} max={thisMonth} onChange={(e) => e.target.value && setMonth(e.target.value)}
-          className="rounded-full border border-ink-900/12 bg-transparent px-4 py-2 text-sm text-ink-900 outline-none focus:border-gold-400 focus:ring-0" />
+        <div className="flex rounded-full border border-ink-900/10 p-1">
+          {[['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([k, l]) => <button key={k} onClick={() => { setPeriod(k); setDate(todayIso); setOpen(null); }} className={seg(period === k)}>{l}</button>)}
+        </div>
       </div>
-      {busy && <p className="mt-4 stamp text-ink-700/60">Loading…</p>}
-      {err && <p className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm text-red-700">{err}</p>}
-      {rep && !busy && (
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <button aria-label="Previous" onClick={() => setDate(isoShift(date, period, -1))} className="grid h-9 w-9 place-items-center rounded-full border border-ink-900/12 text-ink-800/70 hover:border-gold-400">←</button>
+        <p className="text-center font-display text-2xl text-ink-900">{title}</p>
+        <button aria-label="Next" disabled={!canNext} onClick={() => setDate(isoShift(date, period, 1))} className="grid h-9 w-9 place-items-center rounded-full border border-ink-900/12 text-ink-800/70 hover:border-gold-400 disabled:opacity-30">→</button>
+      </div>
+      {date !== todayIso && <button onClick={() => setDate(todayIso)} className="mx-auto mt-1 block stamp text-ink-700/60 hover:text-gold-600">Back to today</button>}
+
+      {busy && <p className="mt-5 stamp text-ink-700/60">Loading…</p>}
+      {err && <p className="mt-5 rounded-xl bg-red-500/10 p-4 text-sm text-red-700">{err}</p>}
+
+      {r && !busy && tab === 'attendance' && period === 'day' && (
         <>
-          <p className="mt-2 text-xs text-ink-800/60">
-            {rep.from.slice(8)} — {rep.to.slice(8)} · late = check-in after {rep.lateAfter || '09:15'} · check-in closes {rep.closes || '11:00'} · absent = working day with no check-in and no approved leave
-          </p>
-          <ul className="mt-5 divide-y divide-ink-900/10">
-            {rep.rows.map((r) => (
-              <li key={r.email} className="py-3">
-                <button onClick={() => setOpen(open === r.email ? null : r.email)} className="flex w-full items-center justify-between gap-3 text-left">
-                  <span className="text-ink-900">{r.name}</span>
-                  <span className="flex shrink-0 gap-3 text-xs text-ink-800/70">
-                    <span>{r.present}/{r.workingDays} days</span>
-                    <span>{r.hours}h</span>
-                    {r.late > 0 && <span className="text-lilac-600">{r.late} late</span>}
-                    {r.absent > 0 && <span className="text-red-700">{r.absent} absent</span>}
-                  </span>
-                </button>
-                {open === r.email && (
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-800/80 sm:grid-cols-4">
-                    {[['Present', `${r.present} of ${r.workingDays}`], ['Hours', r.hours], ['Late', r.late], ['No check-out', r.noCheckout], ['Absent', r.absent],
-                      ['Short leave', `${r.shortLeaveHours || 0}h${r.shortLeaveOver ? ` · ${r.shortLeaveOver} over` : ''}`],
-                      ...Object.entries(r.leave).map(([t, v]) => [`${t} leave`, `${v}d`])].map(([k, v]) => (
-                      <div key={k} className="rounded-xl border border-ink-900/10 p-2.5"><p className="stamp text-[9px] text-ink-700/50">{k}</p><p className="mt-1 text-sm text-ink-900">{v}</p></div>
-                    ))}
-                    {r.lateDates.length > 0 && <p className="col-span-full text-ink-800/60">Late on: {r.lateDates.join(', ')}</p>}
-                  </div>
-                )}
-              </li>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {['ontime', 'late', 'absent', 'leave', 'waiting'].filter((k) => r.totals[k]).map((k) => (
+              <span key={k} className={'rounded-full px-3 py-1 text-xs ' + chip(k).cls}>{chip(k).label} {r.totals[k]}</span>
             ))}
+            {r.rows.some((x) => x.daily[0].outNow) && <span className="rounded-full bg-lilac-400/20 px-3 py-1 text-xs text-lilac-600">Out on short leave {r.rows.filter((x) => x.daily[0].outNow).length}</span>}
+          </div>
+          <ul className="mt-4 divide-y divide-ink-900/10">
+            {r.rows.map((x) => { const d = x.daily[0]; const c = chip(d.status); return (
+              <li key={x.email} className="flex items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="text-ink-900">{x.name}</p>
+                  <p className="text-xs text-ink-800/60">
+                    {d.in ? `${d.in}${d.out ? ` — ${d.out}` : ''}${d.hours ? ` · ${d.hours}h` : ''}${d.lateMin ? ` · ${d.lateMin} min late` : ''}${d.shortMin ? ` · ${d.shortMin} min short leave` : ''}` : (d.status === 'leave' ? 'Approved leave' : d.note || '')}
+                    {d.outNow && <span className="text-lilac-600"> · out since {d.outNow}</span>}
+                  </p>
+                </div>
+                {c.label && <span className={'shrink-0 rounded-full px-2.5 py-1 text-[11px] ' + c.cls}>{d.status === 'leave' ? d.note : c.label}</span>}
+              </li>); })}
           </ul>
-          {types.length > 0 && <p className="mt-3 text-xs text-ink-800/60">Leave this month: {types.map((t) => `${t} ${rep.rows.reduce((a, r) => a + (r.leave[t] || 0), 0)}d`).join(' · ')}</p>}
-          <button onClick={download} className="magnetic-btn mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full border border-ink-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.18em] text-ink-900 transition hover:border-gold-400">
-            Download for Excel ↓
-          </button>
         </>
+      )}
+
+      {r && !busy && tab === 'attendance' && period === 'week' && (
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left">
+              <th className="py-2 text-[10px] font-normal uppercase tracking-wider text-ink-700/50">Name</th>
+              {r.rows[0] && r.rows[0].daily.slice(0, 5).map((d) => <th key={d.date} className="px-0.5 py-2 text-center text-[10px] font-normal uppercase tracking-wider text-ink-700/50">{fmtD(d.date, { weekday: 'short' }).slice(0, 2)}<br />{d.date.slice(8)}</th>)}
+              <th className="hidden py-2 text-right text-[10px] font-normal uppercase tracking-wider text-ink-700/50 sm:table-cell">Hours</th>
+            </tr></thead>
+            <tbody className="divide-y divide-ink-900/10">
+              {r.rows.map((x) => (
+                <tr key={x.email}>
+                  <td className="max-w-[90px] truncate py-2.5 pr-2 text-ink-900">{x.name}</td>
+                  {x.daily.slice(0, 5).map((d) => { const c = chip(d.status); return (
+                    <td key={d.date} className="py-2.5 text-center" title={`${c.label}${d.in ? ' ' + d.in : ''}${d.note ? ' · ' + d.note : ''}`}>
+                      {c.short ? <span className={'inline-grid h-6 min-w-[24px] place-items-center rounded-full px-1 text-[10px] ' + c.cls}>{c.short}</span> : <span className="text-ink-700/30">·</span>}
+                    </td>); })}
+                  <td className="hidden py-2.5 text-right text-ink-800/80 sm:table-cell">{x.hours}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-3 text-xs text-ink-800/60">✓ on time · L late · A absent · LV on leave · … not in yet{r.holidays.length ? ` · holiday: ${r.holidays.map((h) => h.name).join(', ')}` : ''}</p>
+        </div>
+      )}
+
+      {r && !busy && tab === 'attendance' && period === 'month' && (
+        <ul className="mt-5 divide-y divide-ink-900/10">
+          {r.rows.map((x) => (
+            <li key={x.email} className="py-3">
+              <button onClick={() => setOpen(open === x.email ? null : x.email)} className="flex w-full items-center justify-between gap-3 text-left">
+                <span className="text-ink-900">{x.name}</span>
+                <span className="flex shrink-0 gap-3 text-xs text-ink-800/70">
+                  <span>{x.present}/{x.workingDays} days</span><span>{x.hours}h</span>
+                  {x.late > 0 && <span className="text-lilac-600">{x.late} late</span>}
+                  {x.absent > 0 && <span className="text-red-700">{x.absent} absent</span>}
+                </span>
+              </button>
+              {open === x.email && (
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                  {[['Present', `${x.present} of ${x.workingDays}`], ['Hours', x.hours], ['Late', `${x.late} · ${x.lateMinutes} min`], ['No check-out', x.noCheckout], ['Absent', x.absent],
+                    ['Short leave', `${x.shortLeaveHours}h${x.shortLeaveOver ? ` · ${x.shortLeaveOver} over` : ''}`], ...Object.entries(x.leave).map(([t, v]) => [`${t} leave`, `${v}d`])].map(([k, v]) => (
+                    <div key={k} className="rounded-xl border border-ink-900/10 p-2.5"><p className="stamp text-[9px] text-ink-700/50">{k}</p><p className="mt-1 text-sm text-ink-900">{v}</p></div>
+                  ))}
+                  {x.lateDates.length > 0 && <p className="col-span-full text-ink-800/60">Late on: {x.lateDates.join(', ')}</p>}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {r && !busy && tab === 'leave' && (
+        <>
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            {[['On leave', r.totals.people], ['Leave days', r.totals.approvedDays], ['Pending', r.totals.pending]].map(([k, v]) => (
+              <div key={k} className="rounded-2xl border border-ink-900/10 p-3 text-center"><p className="font-display text-3xl text-ink-900">{v}</p><p className="mt-1 text-xs text-ink-800/60">{k}</p></div>
+            ))}
+          </div>
+          <p className="mt-6 stamp text-ink-700/60">{period === 'day' ? 'On leave' : 'Leave in this period'}</p>
+          {r.entries.length === 0 ? <p className="mt-2 text-sm text-ink-800/70">No leave {period === 'day' ? 'on this day' : 'in this period'}.</p> : (
+            <ul className="mt-2 divide-y divide-ink-900/10">
+              {r.entries.map((e) => (
+                <li key={e.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div>
+                    <p className="text-ink-900">{e.name} <span className="ml-1 rounded-full bg-ink-900/5 px-2 py-0.5 text-[11px] text-ink-800/70">{e.type}</span></p>
+                    <p className="text-xs text-ink-800/60">{fmtD(e.start, { day: 'numeric', month: 'short' })}{e.end !== e.start && ` — ${fmtD(e.end, { day: 'numeric', month: 'short' })}`} · {e.days}d{e.daysInPeriod !== e.days ? ` (${e.daysInPeriod} in this ${period})` : ''}</p>
+                  </div>
+                  <span className={'shrink-0 rounded-full px-2.5 py-1 text-[11px] ' + (/^approved$/i.test(e.status) ? 'bg-gold-400/20 text-gold-700' : 'bg-lilac-400/20 text-lilac-600')}>{e.status}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <details className="mt-6" open={period === 'month'}>
+            <summary className="cursor-pointer stamp text-ink-700/60 hover:text-gold-600">Annual leave balances {r.year}</summary>
+            <ul className="mt-2 divide-y divide-ink-900/10 text-sm">
+              {r.people.map((x) => (
+                <li key={x.email} className="flex items-center justify-between gap-3 py-2">
+                  <span className="text-ink-900">{x.name}</span>
+                  <span className="text-right text-xs text-ink-800/70">{x.remaining} of {x.allowance} left · {x.used} taken{x.pending ? ` · ${x.pending} pending` : ''}{x.carried ? ` · ${x.carried} carried` : ''}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </>
+      )}
+
+      {r && !busy && (
+        <button onClick={exportCsv} className="magnetic-btn mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full border border-ink-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.18em] text-ink-900 transition hover:border-gold-400">
+          Download for Excel ↓
+        </button>
       )}
     </div>
   );
@@ -4076,7 +4206,7 @@ function TeamPage() {
           </div>
           {step === 'home' && me && <ShortLeaveQueue />}
           {step === 'home' && me && <AnnualLeave />}
-          {step === 'home' && me && <MonthlyReport />}
+          {step === 'home' && me && <ManagerDashboard />}
           <p className="mt-6 text-center text-xs leading-relaxed text-ink-700/60">
             Your location is read only when you press Check in or Check out, to confirm you are at the office.
             It is saved with your attendance record and used for nothing else.
