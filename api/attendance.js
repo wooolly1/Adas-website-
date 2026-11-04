@@ -246,9 +246,23 @@ async function todayRecord(email) {
   return null;
 }
 
-const summary = (rec) => (rec
-  ? { checkIn: String(rec.row[3] || ''), checkOut: String(rec.row[8] || ''), hours: rec.row[13] === '' ? '' : String(rec.row[13]) }
-  : { checkIn: '', checkOut: '', hours: '' });
+/* Day rules: on time until WORK_START + LATE_GRACE_MIN (09:15), late until CHECKIN_CLOSES (11:00),
+ * after that check-in is closed and the day counts as absent. */
+const hmOf = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+function dayRules() {
+  const start = toMin(env('WORK_START', '09:00'));
+  const lateAfter = start + Number(env('LATE_GRACE_MIN', '15'));
+  const closes = toMin(env('CHECKIN_CLOSES', '11:00'));
+  return { workStart: hmOf(start), lateAfter: hmOf(lateAfter), closes: hmOf(closes), startMin: start, lateAfterMin: lateAfter, closesMin: closes };
+}
+const summary = (rec) => {
+  const rules = dayRules();
+  if (!rec) return { checkIn: '', checkOut: '', hours: '', lateMin: 0, rules };
+  const checkIn = String(rec.row[3] || '');
+  const inMin = toMin(checkIn);
+  return { checkIn, checkOut: String(rec.row[8] || ''), hours: rec.row[13] === '' ? '' : String(rec.row[13]),
+    lateMin: inMin != null && inMin > rules.lateAfterMin ? inMin - rules.startMin : 0, rules };
+};
 
 /* ADAS office, Jeddah: 21°43'22.9"N 39°08'03.8"E. */
 const OFFICE_DEFAULT = { lat: 21.723028, lng: 39.134389 };
@@ -731,7 +745,7 @@ async function handleReport(b, staff, team) {
   const [y, m] = month.split('-').map(Number);
   const first = `${month}-01`, lastDay = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
   const until = lastDay < today ? lastDay : today;
-  const lateAfter = toMin(env('WORK_START', '09:00')) + Number(env('LATE_GRACE_MIN', '15'));
+  const { lateAfterMin: lateAfter, startMin } = dayRules();
 
   const workdays = [];
   for (let d = new Date(first + 'T00:00:00Z'); d <= new Date(until + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
@@ -761,6 +775,7 @@ async function handleReport(b, staff, team) {
       hours: Math.round(present.reduce((a, d) => a + days[d].hours, 0) * 10) / 10,
       late: lateDays.length,
       lateDates: lateDays.map((d) => `${d.slice(8)} (${days[d].in})`),
+      lateMinutes: lateDays.reduce((a, d) => a + (toMin(days[d].in) - startMin), 0),
       noCheckout: present.filter((d) => !days[d].out && d < today).length,
       absent: due.filter((d) => !days[d] && !onLeave.has(d) && d < today).length,
       shortLeaveHours: Math.round(perms.filter((p) => p.email === s.email && p.date >= first && p.date <= lastDay).reduce((a, p) => a + p.minutes, 0) / 6) / 10,
@@ -769,6 +784,7 @@ async function handleReport(b, staff, team) {
     };
   }).sort((a, b2) => a.name.localeCompare(b2.name));
   return { ok: true, month, from: first, to: until, workStart: env('WORK_START', '09:00'), graceMin: Number(env('LATE_GRACE_MIN', '15')),
+    lateAfter: dayRules().lateAfter, closes: dayRules().closes,
     leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label), rows };
 }
 
@@ -786,7 +802,11 @@ module.exports = async function handler(req, res) {
     if (!staff) throw new HttpError(403, 'Your account is not on the team list. Please ask the admin to add you.');
     const name = staff.name || user.name;
 
-    const permsOrNull = async () => { try { return await allPerms(); } catch (e) { if (e.status === 503) return null; throw e; } };
+    // short leave must never block check-in / check-out: if its table can't be read, carry on without it
+    const permsOrNull = async () => {
+      try { return await allPerms(); }
+      catch (e) { if (e.status !== 503) console.warn('Permissions table unreadable:', e.message); return null; }
+    };
 
     if (b.action === 'status') {
       const [rec, perms] = await Promise.all([todayRecord(user.email), permsOrNull()]);
@@ -892,6 +912,10 @@ module.exports = async function handler(req, res) {
       const p = checkPlace(b);
       if (await todayRecord(user.email)) throw new HttpError(409, 'You have already checked in today.');
       const { day, time } = riyadh();
+      const rules = dayRules();
+      if (toMin(time) > rules.closesMin) {
+        throw new HttpError(409, `Check-in closed at ${rules.closes}. Today is recorded as absent unless you have approved leave — please speak to your manager.`);
+      }
       const row = [day, user.email, name, time, p.distance, p.accuracy, p.lat, p.lng, '', '', '', '', '', ''];
       await graph('POST', '/tables/Attendance/rows', { values: [row] });
       return res.status(200).json({ ok: true, today: summary({ row }) });
