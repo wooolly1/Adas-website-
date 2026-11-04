@@ -3398,7 +3398,7 @@ function leaveDays(start, end, holidays = []) {
   }
   return { days: n, skipped };
 }
-const LEAVE_LABELS = { annual: 'Annual', sick: 'Sick', marriage: 'Marriage', bereavement: 'Bereavement', paternity: 'New baby', hajj: 'Hajj', unpaid: 'Unpaid' };
+const LEAVE_LABELS = { annual: 'Annual', sick: 'Sick', marriage: 'Marriage', bereavement: 'Funeral', paternity: 'New baby', hajj: 'Hajj', unpaid: 'Unpaid' };
 const leaveTypeLabel = (t) => LEAVE_LABELS[t] || 'Annual';
 const fmtLeaveDate = (iso) => (iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
 const LEAVE_TONE = {
@@ -3412,6 +3412,17 @@ function AnnualLeave() {
   const [end, setEnd] = useState('');
   const [note, setNote] = useState('');
   const [type, setType] = useState('annual');
+  const [pdf, setPdf] = useState(null); // { name, size, data }
+  const pickPdf = (file) => {
+    setMsg(null);
+    if (!file) { setPdf(null); return; }
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) { setPdf(null); setMsg({ type: 'error', text: 'Only PDF files can be attached.' }); return; }
+    if (file.size > 3 * 1024 * 1024) { setPdf(null); setMsg({ type: 'error', text: 'The PDF is larger than 3 MB. Please choose a smaller file.' }); return; }
+    const fr = new FileReader();
+    fr.onload = () => setPdf({ name: file.name, size: file.size, data: String(fr.result).split(',')[1] || '' });
+    fr.onerror = () => setMsg({ type: 'error', text: 'Could not read that file. Please try again.' });
+    fr.readAsDataURL(file);
+  };
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);
   const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
@@ -3422,8 +3433,8 @@ function AnnualLeave() {
       const r = await attCall(body.action, body);
       if (!r.ok) throw new Error(r.error === 'signed_out' ? 'Your session expired. Please sign in again.' : r.error);
       setData(r);
-      if (okText) setMsg({ type: 'ok', text: okText });
-      return true;
+      if (okText) setMsg({ type: 'ok', text: typeof okText === 'function' ? okText(r) : okText });
+      return r;
     } catch (e) { setMsg({ type: 'error', text: e.message || 'Connection problem. Please try again.' }); return false; }
     finally { setBusy(''); }
   };
@@ -3441,9 +3452,13 @@ function AnnualLeave() {
   const overLimit = isAnnual ? days > (bal ? bal.remaining : 0) : days > typeLimit;
   const submit = async (e) => {
     e.preventDefault();
-    const ok = await run('request', { action: 'leaveRequest', type, start, end, note },
-      `Request sent to ${data && data.approvers && data.approvers.length ? data.approvers.join(' or ') : 'your manager'}.`);
-    if (ok) { setStart(''); setEnd(''); setNote(''); setType('annual'); }
+    const to = data && data.approvers && data.approvers.length ? data.approvers.join(' or ') : 'your manager';
+    const body = { action: 'leaveRequest', type, start, end, note };
+    if (type === 'sick' && pdf) body.attachment = { name: pdf.name, data: pdf.data };
+    const ok = await run('request', body, (r) => (r.attachment === 'failed'
+      ? `Request sent to ${to}, but the PDF could not be emailed — please give it to HR.`
+      : `Request sent to ${to}${r.attachment === 'sent' ? ' with the medical report attached' : ''}.`));
+    if (ok) { setStart(''); setEnd(''); setNote(''); setType('annual'); setPdf(null); }
   };
   const inputCls = 'mt-2 w-full rounded-none border-0 border-b border-ink-900/12 bg-transparent px-0 py-3 text-ink-900 outline-none focus:border-gold-400 focus:ring-0 [color-scheme:light] dark:[color-scheme:dark]';
   const btn = 'magnetic-btn inline-flex items-center justify-center rounded-full px-5 py-3 text-[11px] uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-40';
@@ -3509,6 +3524,20 @@ function AnnualLeave() {
                 <input type="date" required min={start || minStart} value={end} onChange={(e) => setEnd(e.target.value)} className={inputCls} />
               </label>
             </div>
+            {type === 'sick' && (
+              <div>
+                <span className="stamp text-ink-700/60">Medical report (PDF, optional)</span>
+                <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-dashed border-ink-900/20 px-4 py-3 text-sm transition hover:border-gold-400">
+                  <span className={pdf ? 'truncate text-ink-900' : 'text-ink-800/60'}>
+                    {pdf ? `📎 ${pdf.name} · ${pdf.size < 1024 * 1024 ? Math.max(1, Math.round(pdf.size / 1024)) + ' KB' : (pdf.size / 1024 / 1024).toFixed(1) + ' MB'}` : 'Choose a PDF (max 3 MB)'}
+                  </span>
+                  <span className="shrink-0 stamp text-gold-600">{pdf ? 'Change' : 'Browse'}</span>
+                  <input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(e) => pickPdf(e.target.files && e.target.files[0])} />
+                </label>
+                {pdf && <button type="button" onClick={() => setPdf(null)} className="mt-1 stamp text-ink-700/60 hover:text-red-700">Remove</button>}
+                <p className="mt-1 text-xs text-ink-800/60">It's emailed to your manager with the request.</p>
+              </div>
+            )}
             <label className="block"><span className="stamp text-ink-700/60">Note (optional)</span>
               <input type="text" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. family travel" className={inputCls + ' placeholder:text-ink-700/40'} />
             </label>
