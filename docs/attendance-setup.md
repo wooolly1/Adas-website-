@@ -188,11 +188,19 @@ website code** — only into Vercel.
 
 Only Annual leave uses the annual balance. Every type goes to the same manager for approval.
 
-### Monthly report
+### Manager dashboard
 
-Managers see their team, HR/Admin see everyone, on the Team page: days present, hours, late
-arrivals, missing check-outs, absences (working days with no check-in and no approved leave)
-and leave by type. **Download for Excel** saves a CSV that opens in Excel.
+On the Team page, managers see their team and HR/Admin see everyone, in two tabs, each by **Day**,
+**Week** (Sun–Thu) or **Month**, with arrows to move back and forward:
+
+- **Attendance** — Day: each person's status (on time, late, absent, on leave, not in yet, out on
+  short leave). Week: a grid of each person × each day. Month: present days, hours, late arrivals and
+  minutes, missing check-outs, absences, short leave and leave by type.
+- **Leave** — who is on leave (approved and pending) in the period, totals, and everyone's annual
+  balance (for the year, carried, taken, pending, left).
+
+Every view has **Download for Excel** (CSV). Absent = a working day with no check-in and no approved
+leave, counted once check-in has closed (11:00).
 
 ### Short leave (step out / back in)
 
