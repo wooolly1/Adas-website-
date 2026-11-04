@@ -3931,8 +3931,8 @@ function ShortLeave({ perm, busy, reason, setReason, planned, setPlanned, btnPai
   const over = perm.open && leftWhileOut < 0;
   const dayLeft = Math.max(0, perm.limits.day - perm.dayMin), weekLeft = Math.max(0, perm.limits.week - perm.weekMin);
   const req = perm.request;
-  const state = perm.open ? 'out' : req && req.status === 'Approved' ? 'approved' : req && req.status === 'Requested' ? 'waiting'
-    : perm.usedToday ? 'used' : 'idle';
+  const state = perm.open ? 'out' : req && req.status === 'Approved' ? 'approved' : req && req.status === 'Requested' ? 'waiting' : 'idle';
+  const trips = Array.isArray(perm.usedToday) ? perm.usedToday : [];
   const options = [15, 30, 45, 60, 90].filter((m) => m <= perm.leftMin);
   useEffect(() => {
     if (state === 'idle' && options.length && !options.includes(planned)) setPlanned(options[options.length > 1 ? 1 : 0]);
@@ -3947,7 +3947,7 @@ function ShortLeave({ perm, busy, reason, setReason, planned, setPlanned, btnPai
           ? (over ? `${hm(-leftWhileOut)} over` : `${hm(leftWhileOut)} left`)
           : `${hm(dayLeft)} left today · ${hm(weekLeft)} this week`}</p>
       </div>
-      <p className="mt-1 text-xs text-ink-800/60">Once a day, up to {hm(perm.limits.day)}, and {hm(perm.limits.week)} a week, with your manager's approval.</p>
+      <p className="mt-1 text-xs text-ink-800/60">Up to {hm(perm.limits.day)} a day — split into as many trips as you need — and {hm(perm.limits.week)} a week, with your manager's approval.</p>
 
       {state === 'idle' && (
         <>
@@ -3982,9 +3982,9 @@ function ShortLeave({ perm, busy, reason, setReason, planned, setPlanned, btnPai
         </>
       )}
 
-      {state === 'used' && (
-        <p className="mt-4 rounded-2xl bg-ink-900/5 p-4 text-sm text-ink-800">
-          You've taken today's short leave ({perm.usedToday.out}–{perm.usedToday.in}, {perm.usedToday.minutes} min). Short leave is allowed once a day.
+      {trips.length > 0 && (
+        <p className="mt-3 text-xs text-ink-800/70">
+          Taken today: {trips.map((t) => `${t.out}–${t.in} (${t.minutes} min)`).join(', ')} · {hm(trips.reduce((a, t) => a + t.minutes, 0))} of {hm(perm.limits.day)} used
         </p>
       )}
 
