@@ -3451,7 +3451,8 @@ function AnnualLeave() {
             <span className="pb-1 text-sm text-ink-800/70">of {bal.allowance} days left</span>
           </div>
           <p className="mt-2 text-xs text-ink-800/70">
-            {bal.entitlement} days for {bal.year}{bal.carried > 0 && ` + ${bal.carried} carried from ${bal.year - 1}`}
+            {bal.earning ? `${bal.entitlement} of ${bal.fullYear} days earned so far in ${bal.year}` : `${bal.entitlement} days for ${bal.year}`}
+            {bal.carried > 0 && ` + ${bal.carried} carried from ${bal.year - 1}`}
             {bal.joinDate && ` · joined ${new Date(bal.joinDate + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`}
             {bal.serviceYears != null && bal.serviceYears >= 1 && ` · ${bal.serviceYears} year${bal.serviceYears === 1 ? '' : 's'} of service`}
           </p>
@@ -3484,11 +3485,13 @@ function AnnualLeave() {
               <p className={'text-sm ' + (days > bal.remaining ? 'text-red-700' : 'text-ink-800/80')}>
                 {days === 0 ? 'No working days in these dates (weekends and public holidays don\'t count).'
                   : `${days} working day${days === 1 ? '' : 's'} · ${Math.max(0, bal.remaining - days)} would remain`}
-                {days > bal.remaining && ` — more than your ${bal.remaining} days left.`}
+                {days > bal.remaining && (bal.earning
+                  ? ` — more than you have today; you keep earning days, so it may be fine for later dates.`
+                  : ` — more than your ${bal.remaining} days left.`)}
                 {skipped.length > 0 && <span className="block text-xs text-ink-800/60">Not counted: {skipped.join(', ')}</span>}
               </p>
             )}
-            <button type="submit" disabled={!!busy || !days || days > bal.remaining} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+            <button type="submit" disabled={!!busy || !days || (days > bal.remaining && !bal.earning)} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
               {busy === 'request' ? 'Sending…' : 'Send to manager'}
             </button>
             <p className="text-center text-xs text-ink-800/60">

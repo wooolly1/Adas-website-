@@ -45,7 +45,9 @@ website's **Vercel** project. Time: about 20 minutes.
      every request. Leave it blank for everyone else.
    - **`Joining Date`** (recommended): the date the person joined, e.g. `2023-03-15` or `15/03/2023`.
      Their days are calculated from it: **22 a year**, **30 a year after 5 years' service** (the year
-     they reach 5 years is split by date), and the **joining year is pro-rated** (joined 1 July → 11 days).
+     they reach 5 years is split by date). In the **joining year** days are pro-rated and **earned month by
+     month** (joined 1 July → about 1.8 days a month, 11 by 31 December); from the next year the
+     full year is available on 1 January.
    - **`Opening Balance`** (optional): days someone still had left from before the system started
      (2026). From then on, **unused days carry over automatically** into the next year.
    - **`Annual Days`** is optional and overrides the 22/30 rule for that person (still pro-rated in the joining year).
@@ -129,7 +131,6 @@ Vercel → the website project → **Settings → Environment Variables** → ad
 | `ALLOWED_DOMAIN` | `adas.com.sa` |
 | `ANNUAL_LEAVE_DAYS` | optional, default `22` |
 | `LEAVE_DAYS_AFTER_5Y` | optional, default `30` |
-| `LEAVE_CARRY_MAX` | optional: most days that can carry into a new year (blank = no limit) |
 | `LEAVE_START_YEAR` | optional, default `2026` — first year the system counts carry-over from |
 | `MAIL_FROM` | optional: a mailbox such as `office@adas.com.sa` to send leave emails from |
 
