@@ -3431,7 +3431,8 @@ function AnnualLeave() {
   const bal = data && data.balance;
   const submit = async (e) => {
     e.preventDefault();
-    const ok = await run('request', { action: 'leaveRequest', start, end, note }, 'Request sent to your manager.');
+    const ok = await run('request', { action: 'leaveRequest', start, end, note },
+      `Request sent to ${data && data.approvers && data.approvers.length ? data.approvers.join(' or ') : 'your manager'}.`);
     if (ok) { setStart(''); setEnd(''); setNote(''); }
   };
   const inputCls = 'mt-2 w-full rounded-none border-0 border-b border-ink-900/12 bg-transparent px-0 py-3 text-ink-900 outline-none focus:border-gold-400 focus:ring-0 [color-scheme:light] dark:[color-scheme:dark]';
@@ -3485,6 +3486,11 @@ function AnnualLeave() {
             <button type="submit" disabled={!!busy || !days || days > bal.remaining} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
               {busy === 'request' ? 'Sending…' : 'Send to manager'}
             </button>
+            <p className="text-center text-xs text-ink-800/60">
+              {data.approvers && data.approvers.length
+                ? `Goes to ${data.approvers.join(' or ')} for approval.`
+                : 'No manager is set for you yet — please tell the admin.'}
+            </p>
           </form>
 
           {data.holidays && data.holidays.length > 0 && (
@@ -3549,9 +3555,26 @@ function AnnualLeave() {
                   ))}
                 </ul>
               )}
+              {data.upcoming && data.upcoming.length > 0 && (
+                <div className="mt-6">
+                  <p className="stamp text-ink-700/60">Approved — coming up</p>
+                  <ul className="mt-3 divide-y divide-ink-900/10">
+                    {data.upcoming.map((l) => (
+                      <li key={l.id} className="flex items-center justify-between gap-3 py-3">
+                        <div>
+                          <p className="text-ink-900">{l.name}</p>
+                          <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {l.days}d</p>
+                        </div>
+                        <button onClick={() => { if (window.confirm(`Cancel ${l.name}'s approved leave (${fmtLeaveDate(l.start)} — ${fmtLeaveDate(l.end)})? The days go back to their balance.`)) run('c-' + l.id, { action: 'leaveCancel', id: l.id }, `Cancelled ${l.name}'s leave.`); }}
+                          disabled={!!busy} className="stamp shrink-0 text-ink-700/60 hover:text-red-700">Cancel leave</button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {data.team && data.team.length > 0 && (
                 <details className="mt-5">
-                  <summary className="cursor-pointer stamp text-ink-700/60 hover:text-gold-600">Team balances</summary>
+                  <summary className="cursor-pointer stamp text-ink-700/60 hover:text-gold-600">My team's balances</summary>
                   <ul className="mt-3 divide-y divide-ink-900/10 text-sm">
                     {data.team.map((t) => (
                       <li key={t.email} className="flex justify-between py-2"><span className="text-ink-900">{t.name}</span>

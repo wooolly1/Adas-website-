@@ -158,25 +158,58 @@ function cellTime(v) {
 
 const tableRows = async (table, missing) => ((await graph('GET', `/tables/${table}/rows`, null, missing)).value || []).map((r) => r.values[0]);
 
-async function staffMember(email) {
-  const row = (await tableRows('Staff')).find((r) => String(r[0]).trim().toLowerCase() === email);
-  if (!row) return null;
-  const active = String(row[2]).trim().toUpperCase();
-  if (['FALSE', 'NO', '0'].includes(active)) return null;
-  return staffFrom(row);
+/* Staff columns, matched by header name (any order):
+ *   Email | Name | Active | Role (optional: Manager / HR / Admin) | Annual Days (optional)
+ *   | Manager (optional: the email of the person who approves this employee's leave) */
+const STAFF_FIELDS = {
+  email: ['email', 'emailaddress', 'officeemail'], name: ['name', 'fullname', 'employee'], active: ['active', 'enabled'],
+  role: ['role', 'access', 'type'], annualDays: ['annualdays', 'leavedays', 'annualleave', 'allowance'],
+  managerRef: ['manager', 'manageremail', 'linemanager', 'reportsto', 'approver', 'approveremail'],
+};
+const STAFF_DEFAULT_POS = { email: 0, name: 1, active: 2, role: 3, annualDays: 4, managerRef: 5 };
+
+async function staffLayout() {
+  try {
+    const cols = ((await graph('GET', '/tables/Staff/columns?$select=name')).value || []).map((c) => normHeader(c.name));
+    const pos = {};
+    for (const [f, names] of Object.entries(STAFF_FIELDS)) { const i = cols.findIndex((h) => names.includes(h)); if (i >= 0) pos[f] = i; }
+    return pos.email == null ? STAFF_DEFAULT_POS : pos;
+  } catch (e) { return STAFF_DEFAULT_POS; }
 }
 
-/* Staff columns: Email | Name | Active | Role (optional, "Manager") | Annual Days (optional) */
-function staffFrom(row) {
-  const days = Number(row[4]);
+function staffFrom(row, pos = STAFF_DEFAULT_POS) {
+  const v = (f) => (pos[f] == null ? '' : row[pos[f]]);
+  const days = Number(v('annualDays'));
+  const role = String(v('role') || '').trim();
   return {
-    email: String(row[0]).trim().toLowerCase(),
-    name: String(row[1] || '').trim(),
-    active: !['FALSE', 'NO', '0'].includes(String(row[2]).trim().toUpperCase()),
-    manager: /^(manager|admin|hr)$/i.test(String(row[3] || '').trim()),
+    email: String(v('email')).trim().toLowerCase(),
+    name: String(v('name') || '').trim(),
+    active: !['FALSE', 'NO', '0'].includes(String(v('active')).trim().toUpperCase()),
+    role,
+    manager: /^(manager|admin|hr)$/i.test(role),
+    admin: /^(admin|hr)$/i.test(role),
+    managerRef: String(v('managerRef') || '').trim().toLowerCase(),
     allowance: Number.isFinite(days) && days > 0 ? days : Number(env('ANNUAL_LEAVE_DAYS', '22')),
   };
 }
+
+/** All staff rows (active and inactive), read once per request. */
+async function loadStaff() {
+  const [pos, rows] = await Promise.all([staffLayout(), tableRows('Staff')]);
+  return rows.map((row) => staffFrom(row, pos)).filter((s) => s.email);
+}
+
+/** Who approves this employee's leave: their own Manager if set, otherwise everyone with Role = Manager. */
+function approversFor(employee, team) {
+  const active = team.filter((s) => s.active && s.email !== employee.email);
+  if (employee.managerRef) {
+    const own = active.filter((s) => s.email === employee.managerRef || s.name.toLowerCase() === employee.managerRef);
+    if (own.length) return own;
+  }
+  return active.filter((s) => s.manager);
+}
+const canDecide = (viewer, employee, team) => viewer.email !== employee.email
+  && (viewer.admin || approversFor(employee, team).some((a) => a.email === viewer.email));
 
 async function todayRecord(email) {
   const { day } = riyadh();
@@ -341,20 +374,26 @@ async function notify(to, subject, text) {
   } catch (e) { console.warn('leave email not sent:', e.message); }
 }
 
-async function handleLeave(b, staff, name) {
+async function handleLeave(b, staff, name, team) {
   const year = Number(riyadh().day.slice(0, 4));
   const [leave, holidays] = await Promise.all([allLeave(), holidayList()]);
   const holidaySet = new Set(holidays.map((h) => h.date));
   const view = async () => {
     const mine = leave.filter((l) => l.email === staff.email).sort((x, y) => y.start.localeCompare(x.start)).map(publicLeave);
-    const out = { ok: true, manager: staff.manager, balance: balanceFor(staff, leave, year), requests: mine,
+    const reports = team.filter((s) => s.active && canDecide(staff, s, team));
+    const isApprover = staff.admin || reports.length > 0;
+    const out = { ok: true, manager: isApprover, balance: balanceFor(staff, leave, year), requests: mine,
       holidays: holidays.filter((h) => h.date >= riyadh().day).slice(0, 60) };
-    if (staff.manager) {
-      const team = (await tableRows('Staff')).map(staffFrom).filter((s) => s.active);
+    out.approvers = approversFor(staff, team).map((a) => a.name || a.email);
+    if (isApprover) {
       const byEmail = Object.fromEntries(team.map((s) => [s.email, s]));
-      out.pending = leave.filter((l) => /^pending$/i.test(l.status)).sort((x, y) => x.start.localeCompare(y.start))
-        .map((l) => ({ ...publicLeave(l), remaining: byEmail[l.email] ? balanceFor(byEmail[l.email], leave, Number(l.start.slice(0, 4))).remaining + l.days : null }));
-      out.team = team.map((s) => ({ name: s.name, email: s.email, ...balanceFor(s, leave, year) }));
+      const mineToDecide = (l) => byEmail[l.email] && canDecide(staff, byEmail[l.email], team);
+      const today = riyadh().day;
+      out.pending = leave.filter((l) => /^pending$/i.test(l.status) && mineToDecide(l)).sort((x, y) => x.start.localeCompare(y.start))
+        .map((l) => ({ ...publicLeave(l), remaining: balanceFor(byEmail[l.email], leave, Number(l.start.slice(0, 4))).remaining + l.days }));
+      out.upcoming = leave.filter((l) => /^approved$/i.test(l.status) && l.end >= today && mineToDecide(l))
+        .sort((x, y) => x.start.localeCompare(y.start)).map(publicLeave);
+      out.team = reports.map((s) => ({ name: s.name, email: s.email, ...balanceFor(s, leave, year) }));
     }
     return out;
   };
@@ -378,7 +417,7 @@ async function handleLeave(b, staff, name) {
       start, end, days, note, status: 'Pending', decidedBy: '', decidedAt: '' };
     await graph('POST', '/tables/Leave/rows', { values: [leaveRow(l, leave.layout)] }, LEAVE_MISSING);
     leave.push({ ...l, index: leave.length });
-    const managers = (await tableRows('Staff')).map(staffFrom).filter((s) => s.active && s.manager && s.email !== staff.email).map((s) => s.email);
+    const managers = approversFor(staff, team).map((s) => s.email);
     await notify(managers, `Leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
       `${name} requested annual leave from ${start} to ${end} (${days} working day${days === 1 ? '' : 's'}).\n${note ? 'Note: ' + note + '\n' : ''}\nReview it at https://adas.com.sa/#/team`);
     return view();
@@ -391,20 +430,32 @@ async function handleLeave(b, staff, name) {
   };
   const save = async (l) => graph('PATCH', `/tables/Leave/rows/itemAt(index=${l.index})`, { values: [leaveRow(l, leave.layout)] }, LEAVE_MISSING);
 
+  const employeeOf = (l) => team.find((s) => s.email === l.email) || { email: l.email, name: l.name, managerRef: '' };
+
   if (b.action === 'leaveCancel') {
     const l = find();
-    if (l.email !== staff.email) throw new HttpError(403, 'You can only cancel your own requests.');
-    if (!/^pending$/i.test(l.status)) throw new HttpError(409, 'Only pending requests can be cancelled. Ask your manager to change an approved one.');
     const { day, time } = riyadh();
-    Object.assign(l, { status: 'Cancelled', decidedBy: staff.email, decidedAt: `${day} ${time}` });
+    if (l.email === staff.email) {
+      if (!/^pending$/i.test(l.status)) throw new HttpError(409, 'Only pending requests can be cancelled. Ask your manager to cancel an approved one.');
+      Object.assign(l, { status: 'Cancelled', decidedBy: name, decidedAt: `${day} ${time}` });
+      await save(l);
+      return view();
+    }
+    // a manager cancelling approved leave that hasn't finished yet
+    if (!canDecide(staff, employeeOf(l), team)) throw new HttpError(403, 'You can only cancel leave for your own team.');
+    if (!/^approved$/i.test(l.status)) throw new HttpError(409, `This request is ${l.status.toLowerCase()}; use Approve or Decline instead.`);
+    if (l.end < day) throw new HttpError(409, 'This leave has already finished.');
+    Object.assign(l, { status: 'Cancelled', decidedBy: name, decidedAt: `${day} ${time}` });
     await save(l);
+    await notify([l.email], 'Your approved leave was cancelled',
+      `Your annual leave ${l.start} to ${l.end} (${l.days} working day${l.days === 1 ? '' : 's'}) was cancelled by ${name}. The days are back in your balance.\n\nhttps://adas.com.sa/#/team`);
     return view();
   }
 
   if (b.action === 'leaveDecide') {
-    if (!staff.manager) throw new HttpError(403, 'Only managers can approve leave.');
     const l = find();
     if (l.email === staff.email) throw new HttpError(403, 'Another manager needs to decide on your own request.');
+    if (!canDecide(staff, employeeOf(l), team)) throw new HttpError(403, 'Only this person\'s manager can approve their leave.');
     if (!/^pending$/i.test(l.status)) throw new HttpError(409, `This request is already ${l.status.toLowerCase()}.`);
     const approve = b.decision === 'approve';
     const { day, time } = riyadh();
@@ -427,7 +478,8 @@ module.exports = async function handler(req, res) {
     const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     const idToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     const user = await verifyIdToken(idToken);
-    const staff = await staffMember(user.email);
+    const team = await loadStaff();
+    const staff = team.find((s) => s.email === user.email && s.active);
     if (!staff) throw new HttpError(403, 'Your account is not on the team list. Please ask the admin to add you.');
     const name = staff.name || user.name;
 
@@ -460,7 +512,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (String(b.action || '').startsWith('leave')) {
-      return res.status(200).json(await handleLeave(b, staff, name));
+      return res.status(200).json(await handleLeave(b, staff, name, team));
     }
 
     throw new HttpError(400, 'Unknown action.');
@@ -472,4 +524,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = { maxDuration: 15 };
-module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom };
+module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide };
