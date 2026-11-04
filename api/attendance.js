@@ -213,12 +213,20 @@ async function loadStaff() {
   return rows.map((row) => staffFrom(row, pos)).filter((s) => s.email);
 }
 
-/** Who approves this employee's leave: their own Manager if set, otherwise everyone with Role = Manager. */
+/** Who approves this employee's leave:
+ *  1. their own Manager, if set;
+ *  2. otherwise, for a manager: HR/Admin (never their own reports), or other top-level managers if there's no HR/Admin;
+ *  3. otherwise, for staff: everyone with Role = Manager / HR / Admin. */
 function approversFor(employee, team) {
   const active = team.filter((s) => s.active && s.email !== employee.email);
   if (employee.managerRef) {
     const own = active.filter((s) => s.email === employee.managerRef || s.name.toLowerCase() === employee.managerRef);
     if (own.length) return own;
+  }
+  if (employee.manager) {
+    const admins = active.filter((s) => s.admin);
+    if (admins.length) return admins;
+    return active.filter((s) => s.manager && !s.managerRef && !team.some((r) => r.managerRef === employee.email && r.email === s.email));
   }
   return active.filter((s) => s.manager);
 }
@@ -291,6 +299,7 @@ const LEAVE_FIELDS = {
   name: ['name', 'employee', 'staff'], start: ['start', 'startdate', 'from'], end: ['end', 'enddate', 'to'],
   days: ['days', 'workingdays', 'noofdays'], note: ['note', 'notes', 'reason', 'comment'], status: ['status'],
   decidedBy: ['decidedby', 'approvedby', 'manager'], decidedAt: ['decidedat', 'decisiondate', 'approvedat'],
+  type: ['type', 'leavetype', 'category', 'kind'],
 };
 const LEAVE_REQUIRED = ['id', 'email', 'start', 'end', 'days', 'status'];
 const LEAVE_LABEL = { id: 'ID', requested: 'Requested', email: 'Email', name: 'Name', start: 'Start', end: 'End', days: 'Days',
@@ -342,6 +351,31 @@ async function holidayList() {
   return out;
 }
 
+/* Leave types (Saudi Labour Law defaults). Limits are working days.
+ *   perYear: max per calendar year · perRequest: max per request · once: only once while employed
+ *   minServiceYears: needs this much service · backdateDays: may start this many days in the past */
+const LEAVE_TYPES = {
+  annual:      { label: 'Annual' },
+  sick:        { label: 'Sick', perYear: 120, backdateDays: 30,
+                 hint: 'First 30 days a year on full pay, the next 60 at 75%, the last 30 unpaid. Give the medical report to HR.' },
+  marriage:    { label: 'Marriage', perRequest: 5, hint: '5 days on full pay.' },
+  bereavement: { label: 'Bereavement', perRequest: 5, backdateDays: 7, hint: '5 days on the death of a spouse, parent or child.' },
+  paternity:   { label: 'New baby', perRequest: 3, backdateDays: 7, hint: '3 days for the birth of your child.' },
+  hajj:        { label: 'Hajj', perRequest: 15, once: true, minServiceYears: 2, hint: 'Up to 15 days, once, after 2 years of service.' },
+  unpaid:      { label: 'Unpaid', hint: 'Not paid; your manager decides.' },
+};
+function leaveTypeKey(v) {
+  const t = normHeader(v);
+  if (!t || t.startsWith('annual') || t === 'vacation') return 'annual';
+  if (t.startsWith('sick') || t === 'medical') return 'sick';
+  if (t.startsWith('marri') || t === 'wedding') return 'marriage';
+  if (t.startsWith('bereav') || t === 'death' || t === 'condolence') return 'bereavement';
+  if (t.startsWith('paternity') || t.includes('baby') || t.includes('birth')) return 'paternity';
+  if (t.startsWith('hajj')) return 'hajj';
+  if (t.startsWith('unpaid')) return 'unpaid';
+  return LEAVE_TYPES[t] ? t : 'annual';
+}
+
 function leaveFrom(row, index, layout) {
   const v = (f) => (layout.pos[f] == null ? '' : row[layout.pos[f]]);
   return {
@@ -349,12 +383,16 @@ function leaveFrom(row, index, layout) {
     name: String(v('name') || ''), start: cellDay(v('start')), end: cellDay(v('end')), days: Number(v('days')) || 0,
     note: String(v('note') || ''), status: String(v('status') || 'Pending').trim() || 'Pending',
     decidedBy: String(v('decidedBy') || ''), decidedAt: String(v('decidedAt') || ''),
+    type: leaveTypeKey(v('type')),
   };
 }
 /** Full-width row for the table; keeps any extra columns the admin added. */
 function leaveRow(l, layout) {
   const row = Array.from({ length: layout.width }, (_, i) => (l.raw && l.raw[i] != null ? l.raw[i] : ''));
-  for (const f of Object.keys(LEAVE_FIELDS)) if (layout.pos[f] != null) row[layout.pos[f]] = l[f] == null ? '' : l[f];
+  for (const f of Object.keys(LEAVE_FIELDS)) {
+    if (layout.pos[f] == null) continue;
+    row[layout.pos[f]] = f === 'type' ? (LEAVE_TYPES[l.type] || LEAVE_TYPES.annual).label : (l[f] == null ? '' : l[f]);
+  }
   return row;
 }
 const publicLeave = ({ index, raw, ...l }) => l;
@@ -407,7 +445,7 @@ function entitlementFor(staff, year, asOf) {
 /** Balance for `year`. `asOf` = the date earned days are counted up to (joining year only):
  * today for display, or the leave start date when checking a request. */
 function balanceFor(staff, leave, year, asOf = riyadh().day) {
-  const mine = leave.filter((l) => l.email === staff.email);
+  const mine = leave.filter((l) => l.email === staff.email && l.type === 'annual');
   const sum = (y, re) => mine.filter((l) => l.start.slice(0, 4) === String(y) && re.test(l.status)).reduce((a, l) => a + l.days, 0);
   const startYear = leaveStartYear(), cap = env('LEAVE_CARRY_MAX') === '' ? Infinity : Number(env('LEAVE_CARRY_MAX'));
   let carried = 0;
@@ -452,6 +490,13 @@ async function handleLeave(b, staff, name, team) {
     const out = { ok: true, manager: isApprover, balance: balanceFor(staff, leave, year), requests: mine,
       holidays: holidays.filter((h) => h.date >= riyadh().day).slice(0, 60) };
     out.approvers = approversFor(staff, team).map((a) => a.name || a.email);
+    out.typeColumn = leave.layout.pos.type != null;
+    out.types = Object.entries(LEAVE_TYPES).map(([key, t]) => {
+      const taken = leave.filter((l) => l.email === staff.email && l.type === key && /^(approved|pending)$/i.test(l.status));
+      return { key, label: t.label, hint: t.hint || '', perYear: t.perYear || null, perRequest: t.perRequest || null, once: !!t.once,
+        usedThisYear: taken.filter((l) => l.start.slice(0, 4) === String(year)).reduce((a, l) => a + l.days, 0),
+        usedEver: taken.reduce((a, l) => a + l.days, 0) };
+    });
     if (isApprover) {
       const byEmail = Object.fromEntries(team.map((s) => [s.email, s]));
       const mineToDecide = (l) => byEmail[l.email] && canDecide(staff, byEmail[l.email], team);
@@ -469,27 +514,48 @@ async function handleLeave(b, staff, name, team) {
 
   if (b.action === 'leaveRequest') {
     const start = String(b.start || ''), end = String(b.end || ''), note = String(b.note || '').slice(0, 300);
+    const type = LEAVE_TYPES[b.type] ? b.type : 'annual', rule = LEAVE_TYPES[type];
+    if (type !== 'annual' && leave.layout.pos.type == null) {
+      throw new HttpError(503, 'Other leave types need a "Type" column in the Leave table. Please ask the admin to add it.');
+    }
     if (!isoDay(start) || !isoDay(end)) throw new HttpError(400, 'Please choose a start and end date.');
     if (end < start) throw new HttpError(400, 'The end date is before the start date.');
-    if (start < riyadh().day) throw new HttpError(400, 'Leave can only be requested from today onwards.');
+    const earliest = new Date(riyadh().day + 'T00:00:00Z'); earliest.setUTCDate(earliest.getUTCDate() - (rule.backdateDays || 0));
+    if (start < earliest.toISOString().slice(0, 10)) {
+      throw new HttpError(400, rule.backdateDays ? `${rule.label} leave can start at most ${rule.backdateDays} days ago.` : 'Leave can only be requested from today onwards.');
+    }
     if (start.slice(0, 4) !== end.slice(0, 4)) throw new HttpError(400, 'Please split leave that crosses the new year into two requests.');
     const days = workingDays(start, end, holidaySet);
     if (days === 0) throw new HttpError(400, 'Those dates are only weekends or public holidays — no working days to request.');
     const clash = leave.find((l) => l.email === staff.email && /^(pending|approved)$/i.test(l.status) && l.start <= end && start <= l.end);
     if (clash) throw new HttpError(409, `You already have a ${clash.status.toLowerCase()} request for ${clash.start} — ${clash.end}.`);
-    const bal = balanceFor(staff, leave, Number(start.slice(0, 4)), start);
-    if (days > bal.remaining) {
-      throw new HttpError(400, `That is ${days} working days, but you will have ${bal.remaining} available by ${start}`
-        + (bal.earning ? ' (new joiners earn their days month by month).' : '.'));
+    if (type === 'annual') {
+      const bal = balanceFor(staff, leave, Number(start.slice(0, 4)), start);
+      if (days > bal.remaining) {
+        throw new HttpError(400, `That is ${days} working days, but you will have ${bal.remaining} available by ${start}`
+          + (bal.earning ? ' (new joiners earn their days month by month).' : '.'));
+      }
+    } else {
+      const taken = leave.filter((l) => l.email === staff.email && l.type === type && /^(approved|pending)$/i.test(l.status));
+      if (rule.perRequest && days > rule.perRequest) throw new HttpError(400, `${rule.label} leave is up to ${rule.perRequest} working days per request.`);
+      if (rule.once && taken.length) throw new HttpError(409, `${rule.label} leave can only be taken once.`);
+      if (rule.minServiceYears) {
+        const svc = staff.joinDate ? serviceYears(staff.joinDate, start) : null;
+        if (svc != null && svc < rule.minServiceYears) throw new HttpError(400, `${rule.label} leave is available after ${rule.minServiceYears} years of service.`);
+      }
+      if (rule.perYear) {
+        const used = taken.filter((l) => l.start.slice(0, 4) === start.slice(0, 4)).reduce((a, l) => a + l.days, 0);
+        if (used + days > rule.perYear) throw new HttpError(400, `${rule.label} leave is up to ${rule.perYear} days a year; you have ${rule.perYear - used} left.`);
+      }
     }
     const { day, time } = riyadh();
     const l = { id: 'L' + Date.now().toString(36).toUpperCase(), requested: `${day} ${time}`, email: staff.email, name,
-      start, end, days, note, status: 'Pending', decidedBy: '', decidedAt: '' };
+      start, end, days, note, status: 'Pending', decidedBy: '', decidedAt: '', type };
     await graph('POST', '/tables/Leave/rows', { values: [leaveRow(l, leave.layout)] }, LEAVE_MISSING);
     leave.push({ ...l, index: leave.length });
     const managers = approversFor(staff, team).map((s) => s.email);
-    await notify(managers, `Leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
-      `${name} requested annual leave from ${start} to ${end} (${days} working day${days === 1 ? '' : 's'}).\n${note ? 'Note: ' + note + '\n' : ''}\nReview it at https://adas.com.sa/#/team`);
+    await notify(managers, `${rule.label} leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
+      `${name} requested ${rule.label.toLowerCase()} leave from ${start} to ${end} (${days} working day${days === 1 ? '' : 's'}).\n${note ? 'Note: ' + note + '\n' : ''}\nReview it at https://adas.com.sa/#/team`);
     return view();
   }
 
@@ -531,12 +597,73 @@ async function handleLeave(b, staff, name, team) {
     const { day, time } = riyadh();
     Object.assign(l, { status: approve ? 'Approved' : 'Rejected', decidedBy: name, decidedAt: `${day} ${time}` });
     await save(l);
-    await notify([l.email], `Your leave request was ${approve ? 'approved' : 'not approved'}`,
-      `Your annual leave ${l.start} to ${l.end} (${l.days} working day${l.days === 1 ? '' : 's'}) was ${approve ? 'approved' : 'not approved'} by ${name}.\n\nSee your balance at https://adas.com.sa/#/team`);
+    const label = (LEAVE_TYPES[l.type] || LEAVE_TYPES.annual).label;
+    await notify([l.email], `Your ${label.toLowerCase()} leave request was ${approve ? 'approved' : 'not approved'}`,
+      `Your ${label.toLowerCase()} leave ${l.start} to ${l.end} (${l.days} working day${l.days === 1 ? '' : 's'}) was ${approve ? 'approved' : 'not approved'} by ${name}.\n\nSee your balance at https://adas.com.sa/#/team`);
     return view();
   }
 
   throw new HttpError(400, 'Unknown action.');
+}
+
+
+/* ---------------------------------------------------------- monthly report */
+/* Office day starts WORK_START (default 09:00); a check-in after WORK_START + LATE_GRACE_MIN
+ * (default 15) is "late". Absent = a working day (Sun–Thu, not a holiday, on/after joining, up to
+ * today) with no check-in and no approved leave. */
+const toMin = (hm) => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
+
+async function handleReport(b, staff, team) {
+  const month = /^\d{4}-\d{2}$/.test(String(b.month || '')) ? b.month : riyadh().day.slice(0, 7);
+  const scope = team.filter((s) => s.active && (staff.admin || canDecide(staff, s, team)));
+  if (!staff.admin && !scope.length) throw new HttpError(403, 'Reports are for managers.');
+  const [att, leave, holidays] = await Promise.all([
+    tableRows('Attendance'),
+    allLeave().catch(() => []),
+    holidayList(),
+  ]);
+  const holidaySet = new Set(holidays.map((h) => h.date));
+  const today = riyadh().day;
+  const [y, m] = month.split('-').map(Number);
+  const first = `${month}-01`, lastDay = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  const until = lastDay < today ? lastDay : today;
+  const lateAfter = toMin(env('WORK_START', '09:00')) + Number(env('LATE_GRACE_MIN', '15'));
+
+  const workdays = [];
+  for (let d = new Date(first + 'T00:00:00Z'); d <= new Date(until + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10), w = d.getUTCDay();
+    if (w !== 5 && w !== 6 && !holidaySet.has(iso)) workdays.push(iso);
+  }
+  const byPerson = {};
+  for (const row of att) {
+    const day = cellDay(row[0]); if (day < first || day > lastDay) continue;
+    const email = String(row[1]).trim().toLowerCase();
+    (byPerson[email] = byPerson[email] || {})[day] = { in: cellTime(row[3]), out: row[8] === '' ? '' : cellTime(row[8]), hours: Number(row[13]) || 0 };
+  }
+  const rows = scope.map((s) => {
+    const days = byPerson[s.email] || {};
+    const mine = leave.filter((l) => l.email === s.email && /^approved$/i.test(l.status) && l.start <= lastDay && l.end >= first);
+    const onLeave = new Set(), leaveByType = {};
+    for (const l of mine) {
+      for (const d of workdays) if (d >= l.start && d <= l.end) { onLeave.add(d); leaveByType[l.type] = (leaveByType[l.type] || 0) + 1; }
+    }
+    const due = workdays.filter((d) => !s.joinDate || d >= s.joinDate);
+    const present = Object.keys(days).filter((d) => days[d].in);
+    const lateDays = present.filter((d) => toMin(days[d].in) > lateAfter).sort();
+    return {
+      name: s.name || s.email, email: s.email,
+      workingDays: due.length,
+      present: present.length,
+      hours: Math.round(present.reduce((a, d) => a + days[d].hours, 0) * 10) / 10,
+      late: lateDays.length,
+      lateDates: lateDays.map((d) => `${d.slice(8)} (${days[d].in})`),
+      noCheckout: present.filter((d) => !days[d].out && d < today).length,
+      absent: due.filter((d) => !days[d] && !onLeave.has(d) && d < today).length,
+      leave: Object.fromEntries(Object.entries(leaveByType).map(([k, v]) => [(LEAVE_TYPES[k] || LEAVE_TYPES.annual).label, v])),
+    };
+  }).sort((a, b2) => a.name.localeCompare(b2.name));
+  return { ok: true, month, from: first, to: until, workStart: env('WORK_START', '09:00'), graceMin: Number(env('LATE_GRACE_MIN', '15')),
+    leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label), rows };
 }
 
 /* --------------------------------------------------------------- handler */
@@ -581,6 +708,8 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, today: summary({ row }) });
     }
 
+    if (b.action === 'report') return res.status(200).json(await handleReport(b, staff, team));
+
     if (String(b.action || '').startsWith('leave')) {
       return res.status(200).json(await handleLeave(b, staff, name, team));
     }
@@ -594,4 +723,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.config = { maxDuration: 15 };
-module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay };
+module.exports._test = { riyadh, metres, verifyIdToken, checkPlace, cellDay, cellTime, parseCoord, officeLocation, workingDays, staffFrom, approversFor, canDecide, entitlementFor, balanceFor, anyDay, leaveTypeKey };
