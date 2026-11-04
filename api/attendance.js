@@ -370,7 +370,8 @@ async function allLeave() {
 /* ---- entitlement ----
  * Per year: base days (ANNUAL_LEAVE_DAYS, default 22), or LEAVE_DAYS_AFTER_5Y (default 30) once the
  * person has 5 years' service; the year they cross 5 years is split by date. The joining year is
- * pro-rated from the joining date. A Staff "Annual Days" value replaces the rate for that person.
+ * pro-rated from the joining date and EARNED as the year goes on (accrued daily up to the given
+ * date, rounded down to half days). A Staff "Annual Days" value replaces the rate for that person.
  * Carry-over: whatever is left at the end of a year is added to the next one, starting from
  * LEAVE_START_YEAR (default 2026), whose opening carry is the Staff "Opening Balance".
  * LEAVE_CARRY_MAX (optional) caps the days carried each year. */
@@ -384,9 +385,12 @@ function serviceYears(joinDate, onDay) {
   return y - jy - ((m < jm || (m === jm && d < jd)) ? 1 : 0);
 }
 
-function entitlementFor(staff, year) {
+/** Days for `year`. In the joining year, only what has been earned by `asOf` counts (if given). */
+function entitlementFor(staff, year, asOf) {
   const base = Number(env('ANNUAL_LEAVE_DAYS', '22')), senior = Number(env('LEAVE_DAYS_AFTER_5Y', '30'));
-  const first = `${year}-01-01`, last = `${year}-12-31`;
+  const first = `${year}-01-01`;
+  const joinYear = staff.joinDate && staff.joinDate.slice(0, 4) === String(year);
+  const last = joinYear && asOf && asOf < `${year}-12-31` ? asOf : `${year}-12-31`;
   if (staff.joinDate && staff.joinDate > last) return 0;
   const from = staff.joinDate && staff.joinDate > first ? staff.joinDate : first;
   const daysInYear = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 864e5;
@@ -397,10 +401,12 @@ function entitlementFor(staff, year) {
       : (staff.joinDate && serviceYears(staff.joinDate, day) >= 5 ? senior : base);
     total += rate / daysInYear;
   }
-  return half(total);
+  return joinYear && last !== `${year}-12-31` ? Math.floor(total * 2) / 2 : half(total);
 }
 
-function balanceFor(staff, leave, year) {
+/** Balance for `year`. `asOf` = the date earned days are counted up to (joining year only):
+ * today for display, or the leave start date when checking a request. */
+function balanceFor(staff, leave, year, asOf = riyadh().day) {
   const mine = leave.filter((l) => l.email === staff.email);
   const sum = (y, re) => mine.filter((l) => l.start.slice(0, 4) === String(y) && re.test(l.status)).reduce((a, l) => a + l.days, 0);
   const startYear = leaveStartYear(), cap = env('LEAVE_CARRY_MAX') === '' ? Infinity : Number(env('LEAVE_CARRY_MAX'));
@@ -412,10 +418,12 @@ function balanceFor(staff, leave, year) {
       carried = Math.max(0, Math.min(cap, left));
     }
   }
-  const entitlement = entitlementFor(staff, year);
+  const entitlement = entitlementFor(staff, year, asOf);
+  const fullYear = entitlementFor(staff, year);
   const used = sum(year, /^approved$/i), pending = sum(year, /^pending$/i);
   const allowance = half(entitlement + carried);
-  return { year, entitlement, carried: half(carried), allowance, used, pending, remaining: half(allowance - used - pending),
+  return { year, entitlement, fullYear, earning: entitlement < fullYear, carried: half(carried), allowance, used, pending,
+    remaining: half(allowance - used - pending),
     joinDate: staff.joinDate || '', serviceYears: staff.joinDate ? Math.max(0, serviceYears(staff.joinDate, riyadh().day)) : null };
 }
 
@@ -469,8 +477,11 @@ async function handleLeave(b, staff, name, team) {
     if (days === 0) throw new HttpError(400, 'Those dates are only weekends or public holidays — no working days to request.');
     const clash = leave.find((l) => l.email === staff.email && /^(pending|approved)$/i.test(l.status) && l.start <= end && start <= l.end);
     if (clash) throw new HttpError(409, `You already have a ${clash.status.toLowerCase()} request for ${clash.start} — ${clash.end}.`);
-    const bal = balanceFor(staff, leave, Number(start.slice(0, 4)));
-    if (days > bal.remaining) throw new HttpError(400, `That is ${days} working days, but you have ${bal.remaining} left for ${bal.year}.`);
+    const bal = balanceFor(staff, leave, Number(start.slice(0, 4)), start);
+    if (days > bal.remaining) {
+      throw new HttpError(400, `That is ${days} working days, but you will have ${bal.remaining} available by ${start}`
+        + (bal.earning ? ' (new joiners earn their days month by month).' : '.'));
+    }
     const { day, time } = riyadh();
     const l = { id: 'L' + Date.now().toString(36).toUpperCase(), requested: `${day} ${time}`, email: staff.email, name,
       start, end, days, note, status: 'Pending', decidedBy: '', decidedAt: '' };
