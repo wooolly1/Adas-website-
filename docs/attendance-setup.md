@@ -30,13 +30,21 @@ website's **Vercel** project. Time: about 20 minutes.
    For **annual leave**, add two more columns to the right of `Active` (click inside the
    table and type in the next column so the table grows):
 
-   | Email | Name | Active | Role | Annual Days |
-   |---|---|---|---|---|
-   | kareem@adas.com.sa | Abdulkareem | TRUE | Manager | |
-   | sara@adas.com.sa | Sara | TRUE | | 30 |
+   | Email | Name | Active | Role | Annual Days | Manager |
+   |---|---|---|---|---|---|
+   | kareem@adas.com.sa | Abdulkareem | TRUE | Manager | | |
+   | walaa@adas.com.sa | Walaa | TRUE | Manager | | kareem@adas.com.sa |
+   | amani@adas.com.sa | Amani | TRUE | | | walaa@adas.com.sa |
+   | tamem@adas.com.sa | Tamem | TRUE | | 30 | kareem@adas.com.sa |
 
-   - `Role` = **Manager** lets that person approve or decline leave. Leave it blank for everyone else.
-   - `Annual Days` is optional: blank means the default **22 days** a year.
+   Columns are matched by their header names, so the order doesn't matter.
+   - **`Manager`** = the email of the person who approves this employee's leave. Their requests
+     appear only in that manager's Approvals list on the Team page, and the email alert goes to them.
+     If it's blank, the request goes to everyone with `Role` = Manager.
+   - **`Role`** = **Manager** for anyone who approves leave; **HR** or **Admin** can see and decide
+     every request. Leave it blank for everyone else.
+   - **`Annual Days`** is optional: blank means the default **22 days** a year.
+   - A manager can't approve their own leave — set their own `Manager` to the person above them.
 3. **Sheet "Attendance"** — headers in row 1, then *Insert → Table*, name it
    **`Attendance`** (exactly). The 14 columns, in this order:
 
