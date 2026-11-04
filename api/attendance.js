@@ -790,7 +790,11 @@ module.exports = async function handler(req, res) {
 
     if (b.action === 'status') {
       const [rec, perms] = await Promise.all([todayRecord(user.email), permsOrNull()]);
-      return res.status(200).json({ ok: true, name, email: user.email, today: summary(rec), perm: perms ? permSummary(perms, user.email) : null });
+      const day = riyadh().day;
+      const shortLeaveMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
+        .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
+      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec), shortLeaveMin },
+        perm: perms ? permSummary(perms, user.email) : null });
     }
 
     if (b.action === 'permRequest' || b.action === 'permCancel') {
@@ -898,16 +902,19 @@ module.exports = async function handler(req, res) {
       const rec = await todayRecord(user.email);
       if (!rec) throw new HttpError(409, 'You have not checked in today.');
       if (rec.row[8]) throw new HttpError(409, 'You have already checked out today.');
-      const { time } = riyadh();
+      const { day, time } = riyadh();
+      const perms = await permsOrNull();
+      if (perms) await closeOpenPerm(perms, user.email, time); // stepped out and went home
+      // short leave actually taken today (stepped out and back) is not working time
+      const shortMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
+        .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
       const [ih, im] = String(rec.row[3]).split(':').map(Number);
       const [oh, om] = time.split(':').map(Number);
-      const hours = Math.max(0, ((oh * 60 + om) - (ih * 60 + im)) / 60).toFixed(2);
+      const hours = Math.max(0, ((oh * 60 + om) - (ih * 60 + im) - shortMin) / 60).toFixed(2);
       const row = rec.row.slice(0, LOG_COLUMNS);
       row.splice(8, 6, time, p.distance, p.accuracy, p.lat, p.lng, hours);
       await graph('PATCH', `/tables/Attendance/rows/itemAt(index=${rec.index})`, { values: [row] });
-      const perms = await permsOrNull();
-      if (perms) await closeOpenPerm(perms, user.email, time); // stepped out and went home
-      return res.status(200).json({ ok: true, today: summary({ row }), perm: perms ? permSummary(perms, user.email) : null });
+      return res.status(200).json({ ok: true, today: { ...summary({ row }), shortLeaveMin: shortMin }, perm: perms ? permSummary(perms, user.email) : null });
     }
 
     if (b.action === 'report') return res.status(200).json(await handleReport(b, staff, team));

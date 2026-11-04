@@ -206,5 +206,6 @@ approves or declines in **Short leave requests** on the Team page. Once approved
 the day; time beyond what was approved is marked `Over approved time by N min`. Limits: **1.5 hours a day** and **6 hours a week**
 (Sun–Thu) — Step out is blocked when used up, and time beyond the limit is marked
 `Over limit by N min` in `Status`. Checking out while
-stepped out closes it at check-out time. Change the limits with `PERMISSION_DAY_MIN` (default 90)
+stepped out closes it at check-out time. Short leave actually taken (stepped out and back) is
+**deducted from that day's `Hours`** in the Attendance table; requests that were never used are not. Change the limits with `PERMISSION_DAY_MIN` (default 90)
 and `PERMISSION_WEEK_MIN` (default 360) in Vercel. Without the table, the buttons don't appear.
