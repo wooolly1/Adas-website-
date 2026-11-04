@@ -3752,45 +3752,155 @@ function MonthlyReport() {
 const hm = (min) => `${Math.floor(min / 60)}:${String(Math.round(min % 60)).padStart(2, '0')}`;
 
 /* Step out / Back in during the day — limits come from the API */
-function ShortLeave({ perm, busy, reason, setReason, btnPair, onGo }) {
+function ShortLeave({ perm, busy, reason, setReason, planned, setPlanned, btnPair, onGo }) {
   const [, tick] = useState(0);
   useEffect(() => { if (!perm.open) return undefined; const t = setInterval(() => tick((n) => n + 1), 30000); return () => clearInterval(t); }, [perm.open]);
   const nowMin = (() => { const [h, m] = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }).split(':').map(Number); return h * 60 + m; })();
   const [oh, om] = perm.open ? perm.open.out.split(':').map(Number) : [0, 0];
   const outFor = perm.open ? Math.max(0, nowMin - (oh * 60 + om)) : 0;
-  const leftWhileOut = perm.open ? perm.open.allowed - outFor : 0; // negative = over the limit
+  const leftWhileOut = perm.open ? perm.open.allowed - outFor : 0; // negative = over
   const over = perm.open && leftWhileOut < 0;
   const dayLeft = Math.max(0, perm.limits.day - perm.dayMin), weekLeft = Math.max(0, perm.limits.week - perm.weekMin);
+  const req = perm.request;
+  const state = perm.open ? 'out' : req && req.status === 'Approved' ? 'approved' : req && req.status === 'Requested' ? 'waiting' : 'idle';
+  const options = [15, 30, 45, 60, 90].filter((m) => m <= perm.leftMin);
+  useEffect(() => {
+    if (state === 'idle' && options.length && !options.includes(planned)) setPlanned(options[options.length > 1 ? 1 : 0]);
+  }, [state, perm.leftMin]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ghost = btnPair + ' border border-ink-900/15 text-ink-900 hover:border-gold-400';
+
   return (
     <div className="mt-8 border-t border-ink-900/10 pt-6">
       <div className="flex items-end justify-between gap-3">
         <p className="font-display text-2xl text-ink-900">Short leave</p>
-        <p className="text-xs text-ink-800/70">{perm.open
-          ? (over ? `${hm(-leftWhileOut)} over the limit` : `${hm(leftWhileOut)} left before your limit`)
+        <p className="text-right text-xs text-ink-800/70">{perm.open
+          ? (over ? `${hm(-leftWhileOut)} over` : `${hm(leftWhileOut)} left`)
           : `${hm(dayLeft)} left today · ${hm(weekLeft)} this week`}</p>
       </div>
-      <p className="mt-1 text-xs text-ink-800/60">Up to {hm(perm.limits.day)} a day and {hm(perm.limits.week)} a week. Your manager is notified when you step out.</p>
-      {perm.open ? (
-        <p className={'mt-4 rounded-2xl p-4 text-sm ' + (over ? 'bg-red-500/10 text-red-700' : 'bg-lilac-400/15 text-ink-900')}>
-          Out since {perm.open.out}{perm.open.reason ? ` · ${perm.open.reason}` : ''} — {hm(outFor)} so far{over ? ' · over your limit' : ''}
-        </p>
-      ) : (
-        <label className="mt-4 block"><span className="stamp text-ink-700/60">Reason (optional)</span>
-          <input type="text" maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. bank, doctor, school pickup"
-            className="mt-2 w-full rounded-none border-0 border-b border-ink-900/12 bg-transparent px-0 py-3 text-ink-900 outline-none placeholder:text-ink-700/40 focus:border-gold-400 focus:ring-0" />
-        </label>
+      <p className="mt-1 text-xs text-ink-800/60">Up to {hm(perm.limits.day)} a day and {hm(perm.limits.week)} a week, with your manager's approval.</p>
+
+      {state === 'idle' && (
+        <>
+          {req && req.status === 'Declined' && (
+            <p className="mt-4 rounded-2xl bg-red-500/10 p-3 text-sm text-red-700">{req.decidedBy || 'Your manager'} declined your request for {req.planned} min.</p>
+          )}
+          {options.length > 0 ? (
+            <>
+              <div className="mt-4">
+                <span className="stamp text-ink-700/60">How long</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {options.map((m) => (
+                    <button type="button" key={m} onClick={() => setPlanned(m)} aria-pressed={planned === m}
+                      className={'rounded-full border px-3.5 py-1.5 text-sm transition ' + (planned === m ? 'border-gold-400 bg-gold-400/15 text-ink-900' : 'border-ink-900/12 text-ink-800/70 hover:border-gold-400')}>
+                      {m < 60 ? `${m} min` : `${m / 60} h`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label className="mt-4 block"><span className="stamp text-ink-700/60">Reason (optional)</span>
+                <input type="text" maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. bank, doctor, school pickup"
+                  className="mt-2 w-full rounded-none border-0 border-b border-ink-900/12 bg-transparent px-0 py-3 text-ink-900 outline-none placeholder:text-ink-700/40 focus:border-gold-400 focus:ring-0" />
+              </label>
+              <button onClick={() => onGo('permRequest')} disabled={!!busy}
+                className={btnPair + ' mt-4 w-full bg-lilac-500 text-white hover:bg-lilac-600'}>
+                {busy === 'permRequest' ? 'Sending…' : 'Request to step out'}
+              </button>
+            </>
+          ) : (
+            <p className="mt-4 text-center text-sm text-ink-700/70">No short leave left {dayLeft <= 0 ? 'today' : 'this week'}.</p>
+          )}
+        </>
       )}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <button onClick={() => onGo('permOut')} disabled={!!busy || !!perm.open || perm.leftMin <= 0}
-          className={btnPair + ' border border-ink-900/15 text-ink-900 hover:border-gold-400'}>
-          {busy === 'permOut' ? 'Locating…' : 'Step out'}
-        </button>
-        <button onClick={() => onGo('permIn')} disabled={!!busy || !perm.open}
-          className={btnPair + ' bg-lilac-500 text-white hover:bg-lilac-600'}>
-          {busy === 'permIn' ? 'Locating…' : 'Back in'}
-        </button>
+
+      {state === 'waiting' && (
+        <div className="mt-4 rounded-2xl bg-lilac-400/15 p-4 text-sm text-ink-900">
+          <p>Waiting for your manager's approval · {req.planned} min{req.reason ? ` · ${req.reason}` : ''}</p>
+          <p className="mt-1 text-xs text-ink-800/60">This page checks for the answer automatically.</p>
+          <button onClick={() => onGo('permCancel')} disabled={!!busy} className="mt-3 stamp text-ink-700/60 hover:text-red-700">Cancel request</button>
+        </div>
+      )}
+
+      {state === 'approved' && (
+        <>
+          <p className="mt-4 rounded-2xl bg-gold-400/15 p-4 text-sm text-ink-900">
+            Approved by {req.decidedBy || 'your manager'} · {req.planned} min{req.reason ? ` · ${req.reason}` : ''}. Tap Step out when you leave.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <button onClick={() => onGo('permOut')} disabled={!!busy} className={btnPair + ' bg-lilac-500 text-white hover:bg-lilac-600'}>
+              {busy === 'permOut' ? 'Locating…' : 'Step out'}
+            </button>
+            <button onClick={() => onGo('permCancel')} disabled={!!busy} className={ghost}>Cancel</button>
+          </div>
+        </>
+      )}
+
+      {state === 'out' && (
+        <>
+          <p className={'mt-4 rounded-2xl p-4 text-sm ' + (over ? 'bg-red-500/10 text-red-700' : 'bg-lilac-400/15 text-ink-900')}>
+            Out since {perm.open.out}{perm.open.reason ? ` · ${perm.open.reason}` : ''} — {hm(outFor)} so far{perm.open.planned ? ` of ${perm.open.planned} min approved` : ''}{over ? ' · over' : ''}
+          </p>
+          <button onClick={() => onGo('permIn')} disabled={!!busy} className={btnPair + ' mt-4 w-full bg-lilac-500 text-white hover:bg-lilac-600'}>
+            {busy === 'permIn' ? 'Locating…' : 'Back in'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* Manager: today's short-leave requests, who is out now */
+function ShortLeaveQueue() {
+  const [q, setQ] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState(null);
+  const load = (action = 'permQueue', extra = {}) => attCall(action, extra).then((r) => {
+    if (r.ok) { setQ(r); return r; }
+    if (action !== 'permQueue') setMsg({ type: 'error', text: r.error });
+    return null;
+  }).catch(() => null);
+  useEffect(() => { load(); const t = setInterval(() => load(), 45000); return () => clearInterval(t); }, []);
+  if (!q || !q.manager) return null;
+  const decide = async (r, decision) => {
+    setBusy(r.id + decision); setMsg(null);
+    const res = await load('permDecide', { id: r.id, decision });
+    if (res) setMsg({ type: 'ok', text: `${decision === 'approve' ? 'Approved' : 'Declined'} ${r.name}'s short leave.` });
+    setBusy('');
+  };
+  const btn = 'magnetic-btn inline-flex items-center justify-center rounded-full px-5 py-3 text-[11px] uppercase tracking-[0.18em] transition disabled:opacity-40';
+  return (
+    <div className="glass mt-6 rounded-3xl p-6 shadow-soft md:p-10">
+      <div className="flex items-center justify-between">
+        <p className="stamp text-gold-600">Short leave requests · today</p>
+        <button onClick={() => load()} className="stamp text-ink-700/60 hover:text-gold-600">Refresh</button>
       </div>
-      {!perm.open && perm.leftMin <= 0 && <p className="mt-2 text-center text-xs text-ink-700/60">No short leave left {dayLeft <= 0 ? 'today' : 'this week'}.</p>}
+      {q.requests.length === 0 ? <p className="mt-4 text-sm text-ink-800/70">No requests waiting.</p> : (
+        <ul className="mt-4 space-y-3">
+          {q.requests.map((r) => (
+            <li key={r.id} className="rounded-2xl border border-ink-900/10 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-ink-900">{r.name}</p>
+                  <p className="text-sm text-ink-800/70">{r.planned} min{r.reason ? ` · ${r.reason}` : ''}</p>
+                </div>
+                <span className="shrink-0 text-xs text-ink-800/60">{r.left} min left today</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button onClick={() => decide(r, 'approve')} disabled={!!busy} className={btn + ' bg-gold-400 text-ink-950 hover:bg-gold-300'}>Approve</button>
+                <button onClick={() => decide(r, 'decline')} disabled={!!busy} className={btn + ' border border-ink-900/15 text-ink-900 hover:border-red-500 hover:text-red-700'}>Decline</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {q.out.length > 0 && (
+        <div className="mt-6">
+          <p className="stamp text-ink-700/60">Out now</p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {q.out.map((r) => <li key={r.id} className="flex justify-between"><span className="text-ink-900">{r.name}</span><span className="text-ink-800/70">since {r.out} · {r.planned} min approved</span></li>)}
+          </ul>
+        </div>
+      )}
+      {msg && <p role="status" className={'mt-4 rounded-xl p-3 text-sm ' + (msg.type === 'error' ? 'bg-red-500/10 text-red-700' : 'bg-gold-400/10 text-ink-800')}>{msg.text}</p>}
     </div>
   );
 }
@@ -3843,16 +3953,27 @@ function TeamPage() {
   });
 
   const [reason, setReason] = useState('');
+  const [planned, setPlanned] = useState(30);
   const permGo = (action) => run(action, async () => {
-    const pos = await getPosition();
-    const r = await attCall(action, action === 'permOut' ? { ...pos, reason } : pos);
+    const needsPlace = action === 'permOut' || action === 'permIn';
+    const body = needsPlace ? await getPosition() : action === 'permRequest' ? { planned, reason } : {};
+    const r = await attCall(action, body);
     if (!r.ok) { if (r.error === 'signed_out') { setStep('signin'); throw new Error('Your session expired. Please sign in again.'); } throw new Error(r.error); }
     setMe((m) => ({ ...m, perm: r.perm }));
-    if (action === 'permOut') { setReason(''); setMsg({ type: 'ok', text: 'Stepped out. Tap Back in when you return.' }); }
+    if (action === 'permRequest') { setReason(''); setMsg({ type: 'ok', text: 'Request sent — you\'ll see the answer here.' }); }
+    else if (action === 'permCancel') setMsg({ type: 'ok', text: 'Request cancelled.' });
+    else if (action === 'permOut') setMsg({ type: 'ok', text: 'Stepped out. Tap Back in when you return.' });
     else setMsg(r.closed && /^over/i.test(r.closed.status)
       ? { type: 'error', text: `Welcome back — ${r.closed.minutes} min out, ${r.closed.status.toLowerCase()}.` }
       : { type: 'ok', text: `Welcome back — ${r.closed ? r.closed.minutes : 0} min out.` });
   });
+
+  const waiting = me && me.perm && me.perm.request && me.perm.request.status === 'Requested';
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const t = setInterval(() => { attCall('status').then((r) => { if (r.ok) setMe((m) => ({ ...m, perm: r.perm })); }).catch(() => {}); }, 30000);
+    return () => clearInterval(t);
+  }, [waiting]);
 
   const signOut = async () => {
     try { const app = await msal(); if (app.clearCache) await app.clearCache(); app.setActiveAccount(null); } catch (e) { /* ignore */ }
@@ -3924,7 +4045,7 @@ function TeamPage() {
                 {!today.checkIn && <p className="mt-3 text-center text-xs text-ink-700/60">Check out unlocks after you check in.</p>}
 
                 {me.perm && today.checkIn && !today.checkOut && (
-                  <ShortLeave perm={me.perm} busy={busy} reason={reason} setReason={setReason} btnPair={btnPair} onGo={permGo} />
+                  <ShortLeave perm={me.perm} busy={busy} reason={reason} setReason={setReason} planned={planned} setPlanned={setPlanned} btnPair={btnPair} onGo={permGo} />
                 )}
                 <button onClick={signOut} className="stamp mt-8 w-full text-center text-ink-700/60 hover:text-gold-600">Sign out</button>
               </div>
@@ -3936,6 +4057,7 @@ function TeamPage() {
               </p>
             )}
           </div>
+          {step === 'home' && me && <ShortLeaveQueue />}
           {step === 'home' && me && <AnnualLeave />}
           {step === 'home' && me && <MonthlyReport />}
           <p className="mt-6 text-center text-xs leading-relaxed text-ink-700/60">

@@ -197,11 +197,14 @@ and leave by type. **Download for Excel** saves a CSV that opens in Excel.
 
 Add a table **`Permissions`** (headers in row 1, *Insert → Table*, name it exactly) with:
 
-`Date` · `Email` · `Name` · `Out` · `In` · `Minutes` · `Reason` · `Status`
+`Date` · `Email` · `Name` · `Out` · `In` · `Minutes` · `Reason` · `Status` · `Planned` · `Approved By`
 
-Set `Date`, `Out` and `In` to *Text*. While checked in, staff tap **Step out** (optional reason) and
-**Back in**; both check they're at the office. Limits: **1.5 hours a day** and **6 hours a week**
+Set `Date`, `Out` and `In` to *Text*. **With approval:** while checked in, staff choose how long
+(15–90 min) and an optional reason and tap **Request to step out**; their manager is emailed and
+approves or declines in **Short leave requests** on the Team page. Once approved, staff tap
+**Step out** and **Back in** (both check they're at the office). Unused approvals expire at the end of
+the day; time beyond what was approved is marked `Over approved time by N min`. Limits: **1.5 hours a day** and **6 hours a week**
 (Sun–Thu) — Step out is blocked when used up, and time beyond the limit is marked
-`Over limit by N min` in `Status`. The manager is emailed on each step-out. Checking out while
+`Over limit by N min` in `Status`. Checking out while
 stepped out closes it at check-out time. Change the limits with `PERMISSION_DAY_MIN` (default 90)
 and `PERMISSION_WEEK_MIN` (default 360) in Vercel. Without the table, the buttons don't appear.

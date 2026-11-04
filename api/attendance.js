@@ -643,6 +643,7 @@ const PERM_FIELDS = {
   date: ['date', 'day'], email: ['email'], name: ['name', 'employee'], out: ['out', 'outtime', 'left', 'stepout'],
   in: ['in', 'intime', 'back', 'returned', 'backin'], minutes: ['minutes', 'mins', 'duration'],
   reason: ['reason', 'note', 'notes'], status: ['status', 'flag'],
+  planned: ['planned', 'plannedminutes', 'requestedminutes', 'requested'], decidedBy: ['decidedby', 'approvedby', 'manager'],
 };
 const PERM_MISSING = 'Short leave is not set up yet. Please ask the admin to add the "Permissions" table to the workbook.';
 const permLimits = () => ({ day: Number(env('PERMISSION_DAY_MIN', '90')), week: Number(env('PERMISSION_WEEK_MIN', '360')) });
@@ -661,7 +662,8 @@ async function allPerms() {
     const v = (f) => (layout.pos[f] == null ? '' : row[layout.pos[f]]);
     return { index, raw: row, date: cellDay(v('date')), email: String(v('email')).trim().toLowerCase(), name: String(v('name') || ''),
       out: v('out') === '' ? '' : cellTime(v('out')), in: v('in') === '' ? '' : cellTime(v('in')),
-      minutes: Number(v('minutes')) || 0, reason: String(v('reason') || ''), status: String(v('status') || '') };
+      minutes: Number(v('minutes')) || 0, reason: String(v('reason') || ''), status: String(v('status') || ''),
+      planned: Number(v('planned')) || 0, decidedBy: String(v('decidedBy') || '') };
   }).filter((p) => p.email);
   rows.layout = layout;
   return rows;
@@ -687,10 +689,14 @@ function permSummary(perms, email, now = riyadh()) {
   let allowed = null;
   if (open) { // what was left when they stepped out
     const dayDone = dayMin - liveMin, weekDone = weekMin - liveMin;
-    allowed = Math.max(0, Math.min(lim.day - dayDone, lim.week - weekDone));
+    allowed = Math.max(0, Math.min(lim.day - dayDone, lim.week - weekDone, open.planned || Infinity));
   }
-  return { open: open ? { out: open.out, reason: open.reason, allowed } : null, dayMin, weekMin, limits: lim,
-    leftMin: Math.max(0, Math.min(lim.day - dayMin, lim.week - weekMin)) };
+  // today's request that hasn't been used yet (Requested / Approved / Declined)
+  const req = [...mine].reverse().find((p) => p.date === now.day && !p.out && /^(requested|approved|declined)$/i.test(p.status)) || null;
+  return { open: open ? { out: open.out, reason: open.reason, allowed, planned: open.planned || null } : null, dayMin, weekMin, limits: lim,
+    leftMin: Math.max(0, Math.min(lim.day - dayMin, lim.week - weekMin)),
+    request: req ? { id: req.index, status: req.status.charAt(0).toUpperCase() + req.status.slice(1).toLowerCase(),
+      planned: req.planned, reason: req.reason, decidedBy: req.decidedBy } : null };
 }
 async function closeOpenPerm(perms, email, time) {
   const now = riyadh();
@@ -698,7 +704,8 @@ async function closeOpenPerm(perms, email, time) {
   if (!open) return null;
   const before = permSummary(perms.filter((p) => p !== open), email, { day: now.day, time: open.out });
   open.in = time; open.minutes = Math.max(0, toMin(time) - toMin(open.out));
-  open.status = open.minutes > before.leftMin ? `Over limit by ${open.minutes - before.leftMin} min` : 'OK';
+  open.status = open.minutes > before.leftMin ? `Over limit by ${open.minutes - before.leftMin} min`
+    : open.planned && open.minutes > open.planned ? `Over approved time by ${open.minutes - open.planned} min` : 'OK';
   await graph('PATCH', `/tables/Permissions/rows/itemAt(index=${open.index})`, { values: [permRow(open, perms.layout)] }, PERM_MISSING);
   return open;
 }
@@ -786,6 +793,69 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, name, email: user.email, today: summary(rec), perm: perms ? permSummary(perms, user.email) : null });
     }
 
+    if (b.action === 'permRequest' || b.action === 'permCancel') {
+      const rec = await todayRecord(user.email);
+      if (!rec) throw new HttpError(409, 'Please check in first.');
+      if (rec.row[8]) throw new HttpError(409, 'You have already checked out today.');
+      const perms = await allPerms();
+      const now = riyadh();
+      const sum = permSummary(perms, user.email, now);
+      if (b.action === 'permCancel') {
+        const p = sum.request && perms.find((x) => x.index === sum.request.id);
+        if (!p || !/^(requested|approved)$/i.test(p.status)) throw new HttpError(409, 'There is no request to cancel.');
+        p.status = 'Cancelled';
+        await graph('PATCH', `/tables/Permissions/rows/itemAt(index=${p.index})`, { values: [permRow(p, perms.layout)] }, PERM_MISSING);
+        return res.status(200).json({ ok: true, perm: permSummary(perms, user.email, now) });
+      }
+      if (sum.open) throw new HttpError(409, `You are already out since ${sum.open.out}.`);
+      if (sum.request && /^(requested|approved)$/i.test(sum.request.status)) {
+        throw new HttpError(409, sum.request.status === 'Approved' ? 'Your request is already approved — tap Step out when you leave.' : 'You already have a request waiting for approval.');
+      }
+      if (sum.leftMin <= 0) {
+        throw new HttpError(409, sum.dayMin >= sum.limits.day
+          ? `You've used today's ${sum.limits.day / 60} hours of short leave.` : `You've used this week's ${sum.limits.week / 60} hours of short leave.`);
+      }
+      const planned = Math.round(Number(b.planned) || 0);
+      if (planned < 5) throw new HttpError(400, 'Please choose how long you need.');
+      if (planned > sum.leftMin) throw new HttpError(400, `You have ${sum.leftMin} minutes of short leave left.`);
+      const approvers = approversFor(staff, team);
+      if (!approvers.length) throw new HttpError(409, 'No manager is set for you yet — please tell the admin.');
+      const reason = String(b.reason || '').slice(0, 200);
+      const row = { date: now.day, email: user.email, name, out: '', in: '', minutes: '', reason, status: 'Requested', planned, decidedBy: '' };
+      await graph('POST', '/tables/Permissions/rows', { values: [permRow(row, perms.layout)] }, PERM_MISSING);
+      perms.push({ ...row, minutes: 0, index: perms.length });
+      await notify(approversFor(staff, team).map((s) => s.email), `Short leave request: ${name}, ${planned} min`,
+        `${name} asks to step out for ${planned} minutes${reason ? ` (${reason})` : ''}, requested at ${now.time}.\n\nApprove or decline: https://adas.com.sa/#/team`);
+      return res.status(200).json({ ok: true, perm: permSummary(perms, user.email, now) });
+    }
+
+    if (b.action === 'permQueue' || b.action === 'permDecide') {
+      const perms = await allPerms();
+      const now = riyadh();
+      const byEmail = Object.fromEntries(team.map((x) => [x.email, x]));
+      const mineToDecide = (p) => byEmail[p.email] && canDecide(staff, byEmail[p.email], team);
+      if (b.action === 'permDecide') {
+        const p = perms.find((x) => x.index === Number(b.id));
+        if (!p || p.date !== now.day) throw new HttpError(404, 'That request was not found. Please refresh.');
+        if (!mineToDecide(p)) throw new HttpError(403, 'Only this person\'s manager can decide.');
+        if (!/^requested$/i.test(p.status)) throw new HttpError(409, `This request is already ${p.status.toLowerCase()}.`);
+        const approve = b.decision === 'approve';
+        p.status = approve ? 'Approved' : 'Declined'; p.decidedBy = name;
+        await graph('PATCH', `/tables/Permissions/rows/itemAt(index=${p.index})`, { values: [permRow(p, perms.layout)] }, PERM_MISSING);
+        await notify([p.email], `Short leave ${approve ? 'approved' : 'declined'}`,
+          approve ? `${name} approved your short leave (${p.planned} min). Tap Step out on the Team page when you leave.\n\nhttps://adas.com.sa/#/team`
+            : `${name} declined your short leave request for today.\n\nhttps://adas.com.sa/#/team`);
+      }
+      const today = perms.filter((p) => p.date === now.day && mineToDecide(p));
+      const pub = (p) => ({ id: p.index, name: p.name, email: p.email, planned: p.planned, reason: p.reason, status: p.status, out: p.out, in: p.in, minutes: p.minutes,
+        left: permSummary(perms, p.email, now).leftMin });
+      const isApprover = staff.admin || team.some((x) => x.active && canDecide(staff, x, team));
+      return res.status(200).json({ ok: true, manager: isApprover,
+        requests: today.filter((p) => /^requested$/i.test(p.status)).map(pub),
+        out: today.filter((p) => p.out && !p.in).map(pub),
+        done: today.filter((p) => p.in || /^(approved|declined)$/i.test(p.status)).map(pub) });
+    }
+
     if (b.action === 'permOut' || b.action === 'permIn') {
       const p = checkPlace(b);
       const rec = await todayRecord(user.email);
@@ -801,13 +871,12 @@ module.exports = async function handler(req, res) {
             ? `You've used today's ${sum.limits.day / 60} hours of short leave.`
             : `You've used this week's ${sum.limits.week / 60} hours of short leave.`);
         }
-        const reason = String(b.reason || '').slice(0, 200);
-        const row = { date: now.day, email: user.email, name, out: now.time, in: '', minutes: '', reason, status: 'Out' };
-        await graph('POST', '/tables/Permissions/rows', { values: [permRow(row, perms.layout)] }, PERM_MISSING);
-        perms.push({ ...row, minutes: 0, index: perms.length });
-        const back = new Date(Date.UTC(2000, 0, 1, 0, toMin(now.time) + sum.leftMin)).toISOString().slice(11, 16);
-        await notify(approversFor(staff, team).map((s) => s.email), `Short leave: ${name} stepped out at ${now.time}`,
-          `${name} stepped out of the office at ${now.time}${reason ? ` (${reason})` : ''}.\nShort leave left today: ${sum.leftMin} min — expected back by ${back}.\n\nhttps://adas.com.sa/#/team`);
+        const req = sum.request && perms.find((x) => x.index === sum.request.id);
+        if (!req || !/^approved$/i.test(req.status)) {
+          throw new HttpError(409, req && /^requested$/i.test(req.status) ? 'Your request is still waiting for your manager\'s approval.' : 'Please request short leave first and wait for approval.');
+        }
+        req.out = now.time; req.status = 'Out';
+        await graph('PATCH', `/tables/Permissions/rows/itemAt(index=${req.index})`, { values: [permRow(req, perms.layout)] }, PERM_MISSING);
         return res.status(200).json({ ok: true, perm: permSummary(perms, user.email, now) });
       }
       if (!sum.open) throw new HttpError(409, 'You are not stepped out.');
