@@ -67,7 +67,7 @@ website's **Vercel** project. Time: about 20 minutes.
    `ID` · `Requested` · `Email` · `Name` · `Start` · `End` · `Days` · `Note` · `Status` ·
    `Decided By` · `Decided At`
 
-   For **other leave types** (Sick, Marriage, Bereavement, New baby, Hajj, Unpaid) add a **`Type`**
+   For **other leave types** (Sick, Marriage, Funeral, New baby, Hajj, Unpaid) add a **`Type`**
    column anywhere in the table. Without it, only Annual leave can be requested.
 
    Set `Start` and `End` to *Number format → Text* as well. The website adds and updates
@@ -178,9 +178,9 @@ website code** — only into Vercel.
 | Type | Rule |
 |---|---|
 | Annual | Joining-date entitlement with carry-over (see Staff columns) |
-| Sick | Up to 120 days a year (30 full pay, 60 at 75%, 30 unpaid); may be entered up to 30 days after it started |
+| Sick | Up to 120 days a year (30 full pay, 60 at 75%, 30 unpaid); may be entered up to 30 days after it started; optional medical report (PDF, max 3 MB) is emailed to the manager — needs `MAIL_FROM` |
 | Marriage | Up to 5 days per request |
-| Bereavement | Up to 5 days per request (spouse, parent, child); up to 7 days back |
+| Funeral | Up to 5 days per request (spouse, parent, child); up to 7 days back |
 | New baby | Up to 3 days per request; up to 7 days back |
 | Hajj | Up to 15 days, once, after 2 years' service |
 | Unpaid | No limit; manager decides |

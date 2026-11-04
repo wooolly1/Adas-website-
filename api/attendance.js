@@ -356,10 +356,10 @@ async function holidayList() {
  *   minServiceYears: needs this much service · backdateDays: may start this many days in the past */
 const LEAVE_TYPES = {
   annual:      { label: 'Annual' },
-  sick:        { label: 'Sick', perYear: 120, backdateDays: 30,
-                 hint: 'First 30 days a year on full pay, the next 60 at 75%, the last 30 unpaid. Give the medical report to HR.' },
+  sick:        { label: 'Sick', perYear: 120, backdateDays: 30, attachment: true,
+                 hint: 'First 30 days a year on full pay, the next 60 at 75%, the last 30 unpaid. Attach your medical report (PDF) below.' },
   marriage:    { label: 'Marriage', perRequest: 5, hint: '5 days on full pay.' },
-  bereavement: { label: 'Bereavement', perRequest: 5, backdateDays: 7, hint: '5 days on the death of a spouse, parent or child.' },
+  bereavement: { label: 'Funeral', perRequest: 5, backdateDays: 7, hint: '5 days on the death of a spouse, parent or child.' },
   paternity:   { label: 'New baby', perRequest: 3, backdateDays: 7, hint: '3 days for the birth of your child.' },
   hajj:        { label: 'Hajj', perRequest: 15, once: true, minServiceYears: 2, hint: 'Up to 15 days, once, after 2 years of service.' },
   unpaid:      { label: 'Unpaid', hint: 'Not paid; your manager decides.' },
@@ -369,7 +369,7 @@ function leaveTypeKey(v) {
   if (!t || t.startsWith('annual') || t === 'vacation') return 'annual';
   if (t.startsWith('sick') || t === 'medical') return 'sick';
   if (t.startsWith('marri') || t === 'wedding') return 'marriage';
-  if (t.startsWith('bereav') || t === 'death' || t === 'condolence') return 'bereavement';
+  if (t.startsWith('bereav') || t.startsWith('funeral') || t === 'death' || t === 'condolence') return 'bereavement';
   if (t.startsWith('paternity') || t.includes('baby') || t.includes('birth')) return 'paternity';
   if (t.startsWith('hajj')) return 'hajj';
   if (t.startsWith('unpaid')) return 'unpaid';
@@ -466,17 +466,35 @@ function balanceFor(staff, leave, year, asOf = riyadh().day) {
 }
 
 /** Best-effort email via Microsoft Graph (needs MAIL_FROM + Mail.Send). Never blocks the request. */
-async function notify(to, subject, text) {
+async function notify(to, subject, text, attachments = []) {
   const from = env('MAIL_FROM');
-  if (!from || !to.length) return;
+  if (!from || !to.length) return false;
   try {
-    await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from)}/sendMail`, {
+    const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from)}/sendMail`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${await graphToken()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: { subject, body: { contentType: 'Text', content: text },
-        toRecipients: to.map((address) => ({ emailAddress: { address } })) }, saveToSentItems: false }),
+        toRecipients: to.map((address) => ({ emailAddress: { address } })),
+        attachments: attachments.map((a) => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: 'application/pdf', contentBytes: a.data })) },
+        saveToSentItems: false }),
     });
-  } catch (e) { console.warn('leave email not sent:', e.message); }
+    if (!r.ok) { console.warn('leave email not sent:', r.status, (await r.text().catch(() => '')).slice(0, 300)); return false; }
+    return true;
+  } catch (e) { console.warn('leave email not sent:', e.message); return false; }
+}
+
+/* Medical report: PDF only, up to 3 MB (Vercel request limit ~4.5 MB after base64). */
+const MAX_PDF_BYTES = 3 * 1024 * 1024;
+function checkPdf(att) {
+  if (!att) return null;
+  const data = String(att.data || '').replace(/^data:[^,]*,/, '');
+  let buf;
+  try { buf = Buffer.from(data, 'base64'); } catch (e) { buf = null; }
+  if (!buf || !buf.length) throw new HttpError(400, 'The attachment could not be read. Please choose the PDF again.');
+  if (buf.length > MAX_PDF_BYTES) throw new HttpError(400, 'The PDF is larger than 3 MB. Please send a smaller file.');
+  if (buf.slice(0, 5).toString('latin1') !== '%PDF-') throw new HttpError(400, 'Only PDF files can be attached.');
+  const base = String(att.name || 'medical-report').replace(/\.pdf$/i, '').replace(/[^\w\-. \u0600-\u06FF]/g, '').trim().slice(0, 60) || 'medical-report';
+  return { name: base + '.pdf', data: buf.toString('base64'), size: buf.length };
 }
 
 async function handleLeave(b, staff, name, team) {
@@ -548,15 +566,24 @@ async function handleLeave(b, staff, name, team) {
         if (used + days > rule.perYear) throw new HttpError(400, `${rule.label} leave is up to ${rule.perYear} days a year; you have ${rule.perYear - used} left.`);
       }
     }
+    const pdf = b.attachment ? (rule.attachment ? checkPdf(b.attachment) : null) : null;
+    if (b.attachment && !rule.attachment) throw new HttpError(400, `Attachments are only for ${LEAVE_TYPES.sick.label.toLowerCase()} leave.`);
+    const managers = approversFor(staff, team).map((s) => s.email);
+    if (pdf && (!env('MAIL_FROM') || !managers.length)) {
+      throw new HttpError(503, 'The medical report can\'t be emailed right now (email isn\'t set up for your manager). Send the request without it and give the PDF to HR.');
+    }
     const { day, time } = riyadh();
     const l = { id: 'L' + Date.now().toString(36).toUpperCase(), requested: `${day} ${time}`, email: staff.email, name,
-      start, end, days, note, status: 'Pending', decidedBy: '', decidedAt: '', type };
+      start, end, days, note: pdf ? `${note ? note + ' · ' : ''}PDF: ${pdf.name}` : note, status: 'Pending', decidedBy: '', decidedAt: '', type };
     await graph('POST', '/tables/Leave/rows', { values: [leaveRow(l, leave.layout)] }, LEAVE_MISSING);
     leave.push({ ...l, index: leave.length });
-    const managers = approversFor(staff, team).map((s) => s.email);
-    await notify(managers, `${rule.label} leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
-      `${name} requested ${rule.label.toLowerCase()} leave from ${start} to ${end} (${days} working day${days === 1 ? '' : 's'}).\n${note ? 'Note: ' + note + '\n' : ''}\nReview it at https://adas.com.sa/#/team`);
-    return view();
+    const sent = await notify(managers, `${rule.label} leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
+      `${name} requested ${rule.label.toLowerCase()} leave from ${start} to ${end} (${days} working day${days === 1 ? '' : 's'}).\n`
+      + `${note ? 'Note: ' + note + '\n' : ''}${pdf ? `The medical report is attached (${pdf.name}).\n` : ''}\nReview it at https://adas.com.sa/#/team`,
+      pdf ? [pdf] : []);
+    const out = await view();
+    if (pdf) out.attachment = sent ? 'sent' : 'failed';
+    return out;
   }
 
   const find = () => {
