@@ -3687,9 +3687,9 @@ function MonthlyReport() {
   const types = rep ? rep.leaveTypes.filter((t) => rep.rows.some((r) => r.leave[t])) : [];
 
   const download = () => {
-    const head = ['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late arrivals', 'Late dates', 'No check-out', 'Absent', 'Short leave (h)', 'Short leave over limit', ...rep.leaveTypes.map((t) => `${t} leave`)];
+    const head = ['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late arrivals', 'Late minutes', 'Late dates', 'No check-out', 'Absent', 'Short leave (h)', 'Short leave over limit', ...rep.leaveTypes.map((t) => `${t} leave`)];
     const esc = (v) => { const x = String(v == null ? '' : v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
-    const lines = [head, ...rep.rows.map((r) => [r.name, r.email, r.workingDays, r.present, r.hours, r.late, r.lateDates.join(' '), r.noCheckout, r.absent, r.shortLeaveHours || 0, r.shortLeaveOver || 0,
+    const lines = [head, ...rep.rows.map((r) => [r.name, r.email, r.workingDays, r.present, r.hours, r.late, r.lateMinutes || 0, r.lateDates.join(' '), r.noCheckout, r.absent, r.shortLeaveHours || 0, r.shortLeaveOver || 0,
       ...rep.leaveTypes.map((t) => r.leave[t] || 0)])].map((row) => row.map(esc).join(','));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ADAS-attendance-${rep.month}.csv`;
@@ -3712,7 +3712,7 @@ function MonthlyReport() {
       {rep && !busy && (
         <>
           <p className="mt-2 text-xs text-ink-800/60">
-            {rep.from.slice(8)} — {rep.to.slice(8)} · late = check-in after {rep.workStart} + {rep.graceMin} min · absent = working day with no check-in and no approved leave
+            {rep.from.slice(8)} — {rep.to.slice(8)} · late = check-in after {rep.lateAfter || '09:15'} · check-in closes {rep.closes || '11:00'} · absent = working day with no check-in and no approved leave
           </p>
           <ul className="mt-5 divide-y divide-ink-900/10">
             {rep.rows.map((r) => (
@@ -4028,11 +4028,27 @@ function TeamPage() {
                 </div>
                 {today.hours && <p className="mt-3 text-sm text-ink-800/70">Today: {today.hours} hours{today.shortLeaveMin > 0 && ` (${hm(today.shortLeaveMin)} short leave deducted)`}</p>}
 
+                {(() => {
+                  const rules = today.rules;
+                  if (!rules) return null;
+                  const nowHM = clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' });
+                  if (today.checkIn) {
+                    return today.lateMin > 0
+                      ? <p className="mt-3 rounded-xl bg-lilac-400/15 px-3 py-2 text-sm text-lilac-600">Checked in late by {today.lateMin < 60 ? `${today.lateMin} min` : `${hm(today.lateMin)} h`} (on time until {rules.lateAfter}).</p>
+                      : <p className="mt-3 text-sm text-gold-700">On time ✓</p>;
+                  }
+                  if (nowHM > rules.closes) {
+                    return <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-sm text-red-700">Check-in closed at {rules.closes}. Today is recorded as absent unless you have approved leave — please speak to your manager.</p>;
+                  }
+                  return <p className="mt-3 text-xs text-ink-800/70">On time until {rules.lateAfter} · late until {rules.closes} · after {rules.closes} check-in closes{nowHM > rules.lateAfter ? ' — you are now late' : ''}.</p>;
+                })()}
+
                 {today.checkIn && today.checkOut ? (
                   <p className="mt-8 rounded-2xl bg-gold-400/10 p-4 text-center text-sm text-ink-800">You're done for today.</p>
                 ) : (
                   <div className="mt-8 grid grid-cols-2 gap-3">
-                    <button onClick={() => punch('checkIn')} disabled={!!busy || !!today.checkIn}
+                    <button onClick={() => punch('checkIn')} disabled={!!busy || !!today.checkIn
+                      || (!!today.rules && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)}
                       className={btnPair + ' bg-gold-400 text-ink-950 hover:bg-gold-300'}>
                       {busy === 'checkIn' ? 'Locating…' : 'Check in'}
                     </button>
@@ -4042,7 +4058,8 @@ function TeamPage() {
                     </button>
                   </div>
                 )}
-                {!today.checkIn && <p className="mt-3 text-center text-xs text-ink-700/60">Check out unlocks after you check in.</p>}
+                {!today.checkIn && !(today.rules && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)
+                  && <p className="mt-3 text-center text-xs text-ink-700/60">Check out unlocks after you check in.</p>}
 
                 {me.perm && today.checkIn && !today.checkOut && (
                   <ShortLeave perm={me.perm} busy={busy} reason={reason} setReason={setReason} planned={planned} setPlanned={setPlanned} btnPair={btnPair} onGo={permGo} />

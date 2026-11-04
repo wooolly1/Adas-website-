@@ -134,8 +134,9 @@ Vercel → the website project → **Settings → Environment Variables** → ad
 | `ALLOWED_DOMAIN` | `adas.com.sa` |
 | `ANNUAL_LEAVE_DAYS` | optional, default `22` |
 | `LEAVE_DAYS_AFTER_5Y` | optional, default `30` |
-| `WORK_START` | optional, default `09:00` — monthly report: start of the office day |
-| `LATE_GRACE_MIN` | optional, default `15` — minutes after `WORK_START` before a check-in counts as late |
+| `WORK_START` | optional, default `09:00` — start of the office day |
+| `LATE_GRACE_MIN` | optional, default `15` — check-in after `WORK_START` + this is **late** (09:15) |
+| `CHECKIN_CLOSES` | optional, default `11:00` — after this check-in is closed and the day counts as **absent** |
 | `LEAVE_START_YEAR` | optional, default `2026` — first year the system counts carry-over from |
 | `MAIL_FROM` | optional: a mailbox such as `office@adas.com.sa` to send leave emails from |
 
