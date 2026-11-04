@@ -3398,6 +3398,8 @@ function leaveDays(start, end, holidays = []) {
   }
   return { days: n, skipped };
 }
+const LEAVE_LABELS = { annual: 'Annual', sick: 'Sick', marriage: 'Marriage', bereavement: 'Bereavement', paternity: 'New baby', hajj: 'Hajj', unpaid: 'Unpaid' };
+const leaveTypeLabel = (t) => LEAVE_LABELS[t] || 'Annual';
 const fmtLeaveDate = (iso) => (iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
 const LEAVE_TONE = {
   Pending: 'bg-lilac-400/20 text-lilac-600', Approved: 'bg-gold-400/20 text-gold-700',
@@ -3409,6 +3411,7 @@ function AnnualLeave() {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [note, setNote] = useState('');
+  const [type, setType] = useState('annual');
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);
   const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
@@ -3428,12 +3431,19 @@ function AnnualLeave() {
   useEffect(() => { run('load', { action: 'leaveStatus' }); }, []);
 
   const { days, skipped } = leaveDays(start, end, (data && data.holidays) || []);
+  const typeInfo = data && data.types ? data.types.find((t) => t.key === type) : null;
+  const isAnnual = type === 'annual';
+  const BACKDATE = { sick: 30, bereavement: 7, paternity: 7 };
+  const minStart = (() => { const d = new Date(todayIso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - (BACKDATE[type] || 0)); return d.toISOString().slice(0, 10); })();
+  const typeLimit = typeInfo && !isAnnual
+    ? Math.min(typeInfo.perRequest || Infinity, typeInfo.perYear ? typeInfo.perYear - typeInfo.usedThisYear : Infinity) : Infinity;
   const bal = data && data.balance;
+  const overLimit = isAnnual ? days > (bal ? bal.remaining : 0) : days > typeLimit;
   const submit = async (e) => {
     e.preventDefault();
-    const ok = await run('request', { action: 'leaveRequest', start, end, note },
+    const ok = await run('request', { action: 'leaveRequest', type, start, end, note },
       `Request sent to ${data && data.approvers && data.approvers.length ? data.approvers.join(' or ') : 'your manager'}.`);
-    if (ok) { setStart(''); setEnd(''); setNote(''); }
+    if (ok) { setStart(''); setEnd(''); setNote(''); setType('annual'); }
   };
   const inputCls = 'mt-2 w-full rounded-none border-0 border-b border-ink-900/12 bg-transparent px-0 py-3 text-ink-900 outline-none focus:border-gold-400 focus:ring-0 [color-scheme:light] dark:[color-scheme:dark]';
   const btn = 'magnetic-btn inline-flex items-center justify-center rounded-full px-5 py-3 text-[11px] uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-40';
@@ -3469,29 +3479,52 @@ function AnnualLeave() {
 
           <form onSubmit={submit} className="mt-8 space-y-5 border-t border-ink-900/10 pt-6">
             <p className="font-display text-2xl text-ink-900">Request leave</p>
+            {data.types && data.typeColumn && (
+              <div>
+                <span className="stamp text-ink-700/60">Type</span>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {data.types.map((t) => (
+                    <button type="button" key={t.key} onClick={() => setType(t.key)} aria-pressed={type === t.key}
+                      className={'rounded-full border px-3.5 py-1.5 text-sm transition ' + (type === t.key
+                        ? 'border-gold-400 bg-gold-400/15 text-ink-900' : 'border-ink-900/12 text-ink-800/70 hover:border-gold-400')}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {typeInfo && typeInfo.key !== 'annual' && (
+                  <p className="mt-2 text-xs leading-relaxed text-ink-800/70">
+                    {typeInfo.hint}
+                    {typeInfo.perYear ? ` You've used ${typeInfo.usedThisYear} of ${typeInfo.perYear} this year.` : ''}
+                    {typeInfo.once && typeInfo.usedEver ? ' Already taken.' : ''}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <label className="block"><span className="stamp text-ink-700/60">From</span>
-                <input type="date" required min={todayIso} value={start}
+                <input type="date" required min={minStart} value={start}
                   onChange={(e) => { setStart(e.target.value); if (!end || end < e.target.value) setEnd(e.target.value); }} className={inputCls} />
               </label>
               <label className="block"><span className="stamp text-ink-700/60">To</span>
-                <input type="date" required min={start || todayIso} value={end} onChange={(e) => setEnd(e.target.value)} className={inputCls} />
+                <input type="date" required min={start || minStart} value={end} onChange={(e) => setEnd(e.target.value)} className={inputCls} />
               </label>
             </div>
             <label className="block"><span className="stamp text-ink-700/60">Note (optional)</span>
               <input type="text" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. family travel" className={inputCls + ' placeholder:text-ink-700/40'} />
             </label>
             {start && end && (
-              <p className={'text-sm ' + (days > bal.remaining ? 'text-red-700' : 'text-ink-800/80')}>
+              <p className={'text-sm ' + (overLimit ? 'text-red-700' : 'text-ink-800/80')}>
                 {days === 0 ? 'No working days in these dates (weekends and public holidays don\'t count).'
-                  : `${days} working day${days === 1 ? '' : 's'} · ${Math.max(0, bal.remaining - days)} would remain`}
-                {days > bal.remaining && (bal.earning
+                  : isAnnual ? `${days} working day${days === 1 ? '' : 's'} · ${Math.max(0, bal.remaining - days)} would remain`
+                  : `${days} working day${days === 1 ? '' : 's'} of ${typeInfo ? typeInfo.label.toLowerCase() : ''} leave · annual balance not affected`}
+                {!isAnnual && overLimit && ` — more than allowed (${typeLimit === Infinity ? '' : typeLimit + ' max'}).`}
+                {isAnnual && days > bal.remaining && (bal.earning
                   ? ` — more than you have today; you keep earning days, so it may be fine for later dates.`
                   : ` — more than your ${bal.remaining} days left.`)}
                 {skipped.length > 0 && <span className="block text-xs text-ink-800/60">Not counted: {skipped.join(', ')}</span>}
               </p>
             )}
-            <button type="submit" disabled={!!busy || !days || (days > bal.remaining && !bal.earning)} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+            <button type="submit" disabled={!!busy || !days || (isAnnual ? (days > bal.remaining && !bal.earning) : overLimit)} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
               {busy === 'request' ? 'Sending…' : 'Send to manager'}
             </button>
             <p className="text-center text-xs text-ink-800/60">
@@ -3522,7 +3555,7 @@ function AnnualLeave() {
                 {data.requests.map((l) => (
                   <li key={l.id} className="flex items-center justify-between gap-3 py-3">
                     <div>
-                      <p className="text-ink-900">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} <span className="text-ink-800/60">· {l.days}d</span></p>
+                      <p className="text-ink-900">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} <span className="text-ink-800/60">· {l.days}d{l.type && l.type !== 'annual' ? ` · ${leaveTypeLabel(l.type)}` : ''}</span></p>
                       {l.note && <p className="text-xs text-ink-800/60">{l.note}</p>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -3547,11 +3580,11 @@ function AnnualLeave() {
                     <li key={l.id} className="rounded-2xl border border-ink-900/10 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-ink-900">{l.name}</p>
+                          <p className="text-ink-900">{l.name} <span className="ml-1 rounded-full bg-ink-900/5 px-2 py-0.5 text-[11px] text-ink-800/70">{leaveTypeLabel(l.type)}</span></p>
                           <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {l.days} day{l.days === 1 ? '' : 's'}</p>
                           {l.note && <p className="mt-1 text-xs text-ink-800/60">“{l.note}”</p>}
                         </div>
-                        {l.remaining != null && <span className="shrink-0 text-xs text-ink-800/60">{l.remaining} days left</span>}
+                        {l.remaining != null && (!l.type || l.type === 'annual') && <span className="shrink-0 text-xs text-ink-800/60">{l.remaining} days left</span>}
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <button onClick={() => run('d-' + l.id, { action: 'leaveDecide', id: l.id, decision: 'approve' }, `Approved ${l.name}'s leave.`)} disabled={!!busy}
@@ -3571,7 +3604,7 @@ function AnnualLeave() {
                       <li key={l.id} className="flex items-center justify-between gap-3 py-3">
                         <div>
                           <p className="text-ink-900">{l.name}</p>
-                          <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {l.days}d</p>
+                          <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {l.days}d · {leaveTypeLabel(l.type)}</p>
                         </div>
                         <button onClick={() => { if (window.confirm(`Cancel ${l.name}'s approved leave (${fmtLeaveDate(l.start)} — ${fmtLeaveDate(l.end)})? The days go back to their balance.`)) run('c-' + l.id, { action: 'leaveCancel', id: l.id }, `Cancelled ${l.name}'s leave.`); }}
                           disabled={!!busy} className="stamp shrink-0 text-ink-700/60 hover:text-red-700">Cancel leave</button>
@@ -3598,6 +3631,89 @@ function AnnualLeave() {
 
       {msg && (
         <p role="status" className={'mt-6 rounded-xl p-4 text-sm ' + (msg.type === 'error' ? 'bg-red-500/10 text-red-700' : 'bg-gold-400/10 text-ink-800')}>{msg.text}</p>
+      )}
+    </div>
+  );
+}
+
+function MonthlyReport() {
+  const thisMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' }).slice(0, 7);
+  const [month, setMonth] = useState(thisMonth);
+  const [rep, setRep] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [open, setOpen] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    setBusy(true); setErr('');
+    attCall('report', { month }).then((r) => {
+      if (!live) return;
+      if (r.ok) setRep(r); else { setRep(null); if (r.error !== 'Reports are for managers.') setErr(r.error); }
+    }).catch(() => live && setErr('Connection problem. Please try again.')).finally(() => live && setBusy(false));
+    return () => { live = false; };
+  }, [month]);
+
+  if (!rep && !err && !busy) return null; // not a manager
+  const types = rep ? rep.leaveTypes.filter((t) => rep.rows.some((r) => r.leave[t])) : [];
+
+  const download = () => {
+    const head = ['Name', 'Email', 'Working days', 'Present', 'Hours', 'Late arrivals', 'Late dates', 'No check-out', 'Absent', ...rep.leaveTypes.map((t) => `${t} leave`)];
+    const esc = (v) => { const x = String(v == null ? '' : v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
+    const lines = [head, ...rep.rows.map((r) => [r.name, r.email, r.workingDays, r.present, r.hours, r.late, r.lateDates.join(' '), r.noCheckout, r.absent,
+      ...rep.leaveTypes.map((t) => r.leave[t] || 0)])].map((row) => row.map(esc).join(','));
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ADAS-attendance-${rep.month}.csv`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const monthLabel = new Date(month + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  return (
+    <div className="glass mt-6 rounded-3xl p-6 shadow-soft md:p-10">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="stamp text-gold-600">Monthly report</p>
+          <p className="mt-2 font-display text-2xl text-ink-900">{monthLabel}</p>
+        </div>
+        <input type="month" value={month} max={thisMonth} onChange={(e) => e.target.value && setMonth(e.target.value)}
+          className="rounded-full border border-ink-900/12 bg-transparent px-4 py-2 text-sm text-ink-900 outline-none focus:border-gold-400 focus:ring-0" />
+      </div>
+      {busy && <p className="mt-4 stamp text-ink-700/60">Loading…</p>}
+      {err && <p className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm text-red-700">{err}</p>}
+      {rep && !busy && (
+        <>
+          <p className="mt-2 text-xs text-ink-800/60">
+            {rep.from.slice(8)} — {rep.to.slice(8)} · late = check-in after {rep.workStart} + {rep.graceMin} min · absent = working day with no check-in and no approved leave
+          </p>
+          <ul className="mt-5 divide-y divide-ink-900/10">
+            {rep.rows.map((r) => (
+              <li key={r.email} className="py-3">
+                <button onClick={() => setOpen(open === r.email ? null : r.email)} className="flex w-full items-center justify-between gap-3 text-left">
+                  <span className="text-ink-900">{r.name}</span>
+                  <span className="flex shrink-0 gap-3 text-xs text-ink-800/70">
+                    <span>{r.present}/{r.workingDays} days</span>
+                    <span>{r.hours}h</span>
+                    {r.late > 0 && <span className="text-lilac-600">{r.late} late</span>}
+                    {r.absent > 0 && <span className="text-red-700">{r.absent} absent</span>}
+                  </span>
+                </button>
+                {open === r.email && (
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-800/80 sm:grid-cols-4">
+                    {[['Present', `${r.present} of ${r.workingDays}`], ['Hours', r.hours], ['Late', r.late], ['No check-out', r.noCheckout], ['Absent', r.absent],
+                      ...Object.entries(r.leave).map(([t, v]) => [`${t} leave`, `${v}d`])].map(([k, v]) => (
+                      <div key={k} className="rounded-xl border border-ink-900/10 p-2.5"><p className="stamp text-[9px] text-ink-700/50">{k}</p><p className="mt-1 text-sm text-ink-900">{v}</p></div>
+                    ))}
+                    {r.lateDates.length > 0 && <p className="col-span-full text-ink-800/60">Late on: {r.lateDates.join(', ')}</p>}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          {types.length > 0 && <p className="mt-3 text-xs text-ink-800/60">Leave this month: {types.map((t) => `${t} ${rep.rows.reduce((a, r) => a + (r.leave[t] || 0), 0)}d`).join(' · ')}</p>}
+          <button onClick={download} className="magnetic-btn mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full border border-ink-900/15 px-5 py-3 text-[11px] uppercase tracking-[0.18em] text-ink-900 transition hover:border-gold-400">
+            Download for Excel ↓
+          </button>
+        </>
       )}
     </div>
   );
@@ -3729,6 +3845,7 @@ function TeamPage() {
             )}
           </div>
           {step === 'home' && me && <AnnualLeave />}
+          {step === 'home' && me && <MonthlyReport />}
           <p className="mt-6 text-center text-xs leading-relaxed text-ink-700/60">
             Your location is read only when you press Check in or Check out, to confirm you are at the office.
             It is saved with your attendance record and used for nothing else.

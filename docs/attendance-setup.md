@@ -67,6 +67,9 @@ website's **Vercel** project. Time: about 20 minutes.
    `ID` · `Requested` · `Email` · `Name` · `Start` · `End` · `Days` · `Note` · `Status` ·
    `Decided By` · `Decided At`
 
+   For **other leave types** (Sick, Marriage, Bereavement, New baby, Hajj, Unpaid) add a **`Type`**
+   column anywhere in the table. Without it, only Annual leave can be requested.
+
    Set `Start` and `End` to *Number format → Text* as well. The website adds and updates
    these rows; `Status` is Pending, Approved, Rejected or Cancelled. To correct an approved
    request, edit its `Status` or `Days` cell directly.
@@ -131,6 +134,8 @@ Vercel → the website project → **Settings → Environment Variables** → ad
 | `ALLOWED_DOMAIN` | `adas.com.sa` |
 | `ANNUAL_LEAVE_DAYS` | optional, default `22` |
 | `LEAVE_DAYS_AFTER_5Y` | optional, default `30` |
+| `WORK_START` | optional, default `09:00` — monthly report: start of the office day |
+| `LATE_GRACE_MIN` | optional, default `15` — minutes after `WORK_START` before a check-in counts as late |
 | `LEAVE_START_YEAR` | optional, default `2026` — first year the system counts carry-over from |
 | `MAIL_FROM` | optional: a mailbox such as `office@adas.com.sa` to send leave emails from |
 
@@ -167,3 +172,23 @@ website code** — only into Vercel.
   Excel directly.
 - **Vercel plan**: Vercel's free Hobby plan is for non-commercial use; a company website
   should be on the Pro plan.
+
+### Leave types
+
+| Type | Rule |
+|---|---|
+| Annual | Joining-date entitlement with carry-over (see Staff columns) |
+| Sick | Up to 120 days a year (30 full pay, 60 at 75%, 30 unpaid); may be entered up to 30 days after it started |
+| Marriage | Up to 5 days per request |
+| Bereavement | Up to 5 days per request (spouse, parent, child); up to 7 days back |
+| New baby | Up to 3 days per request; up to 7 days back |
+| Hajj | Up to 15 days, once, after 2 years' service |
+| Unpaid | No limit; manager decides |
+
+Only Annual leave uses the annual balance. Every type goes to the same manager for approval.
+
+### Monthly report
+
+Managers see their team, HR/Admin see everyone, on the Team page: days present, hours, late
+arrivals, missing check-outs, absences (working days with no check-in and no approved leave)
+and leave by type. **Download for Excel** saves a CSV that opens in Excel.
