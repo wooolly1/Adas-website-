@@ -255,14 +255,34 @@ function dayRules() {
   const closes = toMin(env('CHECKIN_CLOSES', '11:00'));
   return { workStart: hmOf(start), lateAfter: hmOf(lateAfter), closes: hmOf(closes), startMin: start, lateAfterMin: lateAfter, closesMin: closes };
 }
-const summary = (rec) => {
+const summary = (rec, site = null) => {
   const rules = dayRules();
-  if (!rec) return { checkIn: '', checkOut: '', hours: '', lateMin: 0, rules };
+  const siteInfo = site ? { name: site.note, start: site.start, end: site.end } : null;
+  if (!rec) return { checkIn: '', checkOut: '', hours: '', lateMin: 0, rules, site: siteInfo };
   const checkIn = String(rec.row[3] || '');
   const inMin = toMin(checkIn);
   return { checkIn, checkOut: String(rec.row[8] || ''), hours: rec.row[13] === '' ? '' : String(rec.row[13]),
-    lateMin: inMin != null && inMin > rules.lateAfterMin ? inMin - rules.startMin : 0, rules };
+    lateMin: !site && inMin != null && inMin > rules.lateAfterMin ? inMin - rules.startMin : 0, rules, site: siteInfo };
 };
+
+/** Today's approved site visit for this person, or null. Never throws (missing Leave table = none). */
+async function siteVisitToday(email) {
+  try {
+    const day = riyadh().day;
+    return (await allLeave()).find((l) => l.email === email && l.type === 'site' && /^approved$/i.test(l.status) && l.start <= day && l.end >= day) || null;
+  } catch (e) { return null; }
+}
+
+/** On a site-visit day: any place is fine, but the position must be precise; distance from the office is recorded. */
+function checkPlaceAnywhere(b) {
+  const lat = Number(b.lat), lng = Number(b.lng), acc = Number(b.accuracy);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new HttpError(400, 'Location is missing. Please allow location access and try again.');
+  if (!Number.isFinite(acc) || acc > MAX_ACCURACY_M) {
+    throw new HttpError(400, `Your location is not precise enough (±${Math.round(acc || 0)} m). Turn on GPS / precise location and try again.`);
+  }
+  const { lat: oLat, lng: oLng } = officeLocation();
+  return { distance: metres(lat, lng, oLat, oLng), accuracy: Math.round(acc), lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) };
+}
 
 /* ADAS office, Jeddah: 21°43'22.9"N 39°08'03.8"E. */
 const OFFICE_DEFAULT = { lat: 21.723028, lng: 39.134389 };
@@ -377,6 +397,8 @@ const LEAVE_TYPES = {
   paternity:   { label: 'New baby', perRequest: 3, backdateDays: 7, hint: '3 days for the birth of your child.' },
   hajj:        { label: 'Hajj', perRequest: 15, once: true, minServiceYears: 2, hint: 'Up to 15 days, once, after 2 years of service.' },
   unpaid:      { label: 'Unpaid', hint: 'Not paid; your manager decides.' },
+  site:        { label: 'Site visit', work: true, needsNote: true,
+                 hint: 'Work outside the office (client site, meeting). Once approved you can check in and out from the site; the day counts as worked.' },
 };
 function leaveTypeKey(v) {
   const t = normHeader(v);
@@ -387,6 +409,7 @@ function leaveTypeKey(v) {
   if (t.startsWith('paternity') || t.includes('baby') || t.includes('birth')) return 'paternity';
   if (t.startsWith('hajj')) return 'hajj';
   if (t.startsWith('unpaid')) return 'unpaid';
+  if (t.startsWith('site') || t.startsWith('field') || t.startsWith('outside') || t === 'external') return 'site';
   return LEAVE_TYPES[t] ? t : 'annual';
 }
 
@@ -552,6 +575,7 @@ async function handleLeave(b, staff, name, team) {
     }
     if (!isoDay(start) || !isoDay(end)) throw new HttpError(400, 'Please choose a start and end date.');
     if (end < start) throw new HttpError(400, 'The end date is before the start date.');
+    if (rule.needsNote && !note.trim()) throw new HttpError(400, 'Please write the site or client name.');
     const earliest = new Date(riyadh().day + 'T00:00:00Z'); earliest.setUTCDate(earliest.getUTCDate() - (rule.backdateDays || 0));
     if (start < earliest.toISOString().slice(0, 10)) {
       throw new HttpError(400, rule.backdateDays ? `${rule.label} leave can start at most ${rule.backdateDays} days ago.` : 'Leave can only be requested from today onwards.');
@@ -786,6 +810,10 @@ async function handleReport(b, staff, team) {
       const a = att1[d], lv = leaveOn(d);
       const out = { date: d };
       if (s.joinDate && d < s.joinDate) return { ...out, status: 'not-joined' };
+      const siteLv = lv && lv.type === 'site' ? lv : null;
+      if (a && a.in && siteLv) {
+        return { ...out, status: 'site', note: siteLv.note, in: a.in, out: a.out, hours: a.hours, lateMin: 0, shortMin: 0, outNow: '' };
+      }
       if (a && a.in) {
         const late = toMin(a.in) > rules.lateAfterMin ? toMin(a.in) - rules.startMin : 0;
         const openPerm = d === today && myPerms.find((p) => p.date === d && p.out && !p.in);
@@ -793,18 +821,20 @@ async function handleReport(b, staff, team) {
           shortMin: myPerms.filter((p) => p.date === d && p.in).reduce((x, p) => x + p.minutes, 0), outNow: openPerm ? openPerm.out : '' };
       }
       if (!isWorkday(d)) return { ...out, status: 'off', note: holidayName[d] || 'Weekend' };
+      if (siteLv) return { ...out, status: 'site', note: siteLv.note, noCheckin: d <= today };
       if (lv) return { ...out, status: 'leave', note: label(lv.type) };
       if (d > today) return { ...out, status: 'future' };
       if (!isOver(d)) return { ...out, status: 'waiting' };
       return { ...out, status: 'absent' };
     });
-    const worked = daily.filter((x) => x.status === 'ontime' || x.status === 'late');
+    const worked = daily.filter((x) => x.status === 'ontime' || x.status === 'late' || (x.status === 'site' && x.in));
     const leaveByType = {};
     for (const x of daily) if (x.status === 'leave') leaveByType[x.note] = (leaveByType[x.note] || 0) + 1;
+    const siteDays = daily.filter((x) => x.status === 'site' && x.date <= today).length;
     return {
       name: s.name || s.email, email: s.email,
       workingDays: daily.filter((x) => x.date <= range.until && x.status !== 'off' && x.status !== 'not-joined' && x.status !== 'future').length,
-      present: worked.length,
+      present: worked.length + daily.filter((x) => x.status === 'site' && !x.in && x.date < today).length,
       hours: Math.round(worked.reduce((a, x) => a + x.hours, 0) * 10) / 10,
       late: worked.filter((x) => x.lateMin).length,
       lateDates: worked.filter((x) => x.lateMin).map((x) => `${x.date.slice(8)} (${x.in})`),
@@ -814,6 +844,7 @@ async function handleReport(b, staff, team) {
       shortLeaveHours: Math.round(myPerms.reduce((a, p) => a + p.minutes, 0) / 6) / 10,
       shortLeaveOver: myPerms.filter((p) => /^over/i.test(p.status)).length,
       leave: leaveByType,
+      siteDays,
       daily: range.kind === 'month' ? undefined : daily,
     };
   }).sort((a, b2) => a.name.localeCompare(b2.name));
@@ -842,7 +873,7 @@ async function handleLeaveReport(b, staff, team) {
   const entries = leave.filter((l) => inScope.has(l.email) && /^(approved|pending)$/i.test(l.status) && l.start <= to && l.end >= from)
     .sort((x, y) => x.start.localeCompare(y.start))
     .map((l) => ({ id: l.id, name: l.name || l.email, email: l.email, type: label(l.type), start: l.start, end: l.end,
-      days: l.days, daysInPeriod: clip(l), status: l.status, note: l.note }));
+      days: l.days, daysInPeriod: clip(l), status: l.status, note: l.note, work: !!(LEAVE_TYPES[l.type] || {}).work }));
   const year = Number(from.slice(0, 4));
   const people = scope.map((s) => {
     const bal = balanceFor(s, leave, year);
@@ -855,8 +886,10 @@ async function handleLeaveReport(b, staff, team) {
   }).sort((a, b2) => a.name.localeCompare(b2.name));
   const onLeave = range.kind === 'day' ? entries.filter((e) => /^approved$/i.test(e.status)) : [];
   return { ok: true, period: range.kind, date: range.date, from, to, year, entries, people, onLeave,
-    totals: { approvedDays: entries.filter((e) => /^approved$/i.test(e.status)).reduce((a, e) => a + e.daysInPeriod, 0),
-      pending: entries.filter((e) => /^pending$/i.test(e.status)).length, people: new Set(entries.filter((e) => /^approved$/i.test(e.status)).map((e) => e.email)).size },
+    totals: { approvedDays: entries.filter((e) => /^approved$/i.test(e.status) && !e.work).reduce((a, e) => a + e.daysInPeriod, 0),
+      pending: entries.filter((e) => /^pending$/i.test(e.status)).length,
+      people: new Set(entries.filter((e) => /^approved$/i.test(e.status) && !e.work).map((e) => e.email)).size,
+      siteVisits: entries.filter((e) => /^approved$/i.test(e.status) && e.work).length },
     leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label) };
 }
 
@@ -881,11 +914,11 @@ module.exports = async function handler(req, res) {
     };
 
     if (b.action === 'status') {
-      const [rec, perms] = await Promise.all([todayRecord(user.email), permsOrNull()]);
+      const [rec, perms, site] = await Promise.all([todayRecord(user.email), permsOrNull(), siteVisitToday(user.email)]);
       const day = riyadh().day;
       const shortLeaveMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
         .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
-      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec), shortLeaveMin },
+      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site), shortLeaveMin },
         perm: perms ? permSummary(perms, user.email) : null });
     }
 
@@ -981,20 +1014,22 @@ module.exports = async function handler(req, res) {
     }
 
     if (b.action === 'checkIn') {
-      const p = checkPlace(b);
+      const site = await siteVisitToday(user.email);
+      const p = site ? checkPlaceAnywhere(b) : checkPlace(b);
       if (await todayRecord(user.email)) throw new HttpError(409, 'You have already checked in today.');
       const { day, time } = riyadh();
       const rules = dayRules();
-      if (toMin(time) > rules.closesMin) {
+      if (!site && toMin(time) > rules.closesMin) {
         throw new HttpError(409, `Check-in closed at ${rules.closes}. Today is recorded as absent unless you have approved leave — please speak to your manager.`);
       }
       const row = [day, user.email, name, time, p.distance, p.accuracy, p.lat, p.lng, '', '', '', '', '', ''];
       await graph('POST', '/tables/Attendance/rows', { values: [row] });
-      return res.status(200).json({ ok: true, today: summary({ row }) });
+      return res.status(200).json({ ok: true, today: summary({ row }, site) });
     }
 
     if (b.action === 'checkOut') {
-      const p = checkPlace(b);
+      const site = await siteVisitToday(user.email);
+      const p = site ? checkPlaceAnywhere(b) : checkPlace(b);
       const rec = await todayRecord(user.email);
       if (!rec) throw new HttpError(409, 'You have not checked in today.');
       if (rec.row[8]) throw new HttpError(409, 'You have already checked out today.');
@@ -1010,7 +1045,7 @@ module.exports = async function handler(req, res) {
       const row = rec.row.slice(0, LOG_COLUMNS);
       row.splice(8, 6, time, p.distance, p.accuracy, p.lat, p.lng, hours);
       await graph('PATCH', `/tables/Attendance/rows/itemAt(index=${rec.index})`, { values: [row] });
-      return res.status(200).json({ ok: true, today: { ...summary({ row }), shortLeaveMin: shortMin }, perm: perms ? permSummary(perms, user.email) : null });
+      return res.status(200).json({ ok: true, today: { ...summary({ row }, site), shortLeaveMin: shortMin }, perm: perms ? permSummary(perms, user.email) : null });
     }
 
     if (b.action === 'report') return res.status(200).json(await handleReport(b, staff, team));

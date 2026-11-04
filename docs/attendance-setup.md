@@ -185,6 +185,7 @@ website code** — only into Vercel.
 | New baby | Up to 3 days per request; up to 7 days back |
 | Hajj | Up to 15 days, once, after 2 years' service |
 | Unpaid | No limit; manager decides |
+| Site visit | Work outside the office (site or client name required). Once approved: check in/out from the site (location recorded, any distance), no late or 11:00 rules, counts as worked — not leave, not absent, no balance used |
 
 Only Annual leave uses the annual balance. Every type goes to the same manager for approval.
 
