@@ -598,7 +598,7 @@ async function allDevices() {
 const deviceRow = (d, layout) => { const row = Array(layout.width).fill(''); for (const f of Object.keys(DEVICE_FIELDS)) if (layout.pos[f] != null) row[layout.pos[f]] = d[f] || ''; return row; };
 
 /** Send a notification to every device of these people. Never throws; removes dead subscriptions. */
-async function pushTo(emails, msg) {
+async function pushTo(emails, msg, tally) {
   const keys = vapidKeys();
   if (!keys || !emails.length) return 0;
   let devices;
@@ -612,7 +612,7 @@ async function pushTo(emails, msg) {
       const r = await fetch(d.endpoint, { method: 'POST', body: encryptPush(payload, d.p256dh, d.auth),
         headers: { Authorization: vapidHeader(d.endpoint, keys), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '86400', Urgency: 'high' } });
       if (r.status === 404 || r.status === 410) dead.push(d.index);
-      else if (r.ok) sent++;
+      else if (r.ok) { sent++; if (tally) tally[d.email] = (tally[d.email] || 0) + 1; }
       else console.warn('push failed', r.status, (await r.text().catch(() => '')).slice(0, 200));
     } catch (e) { console.warn('push error', e.message); }
   }));
@@ -1048,18 +1048,31 @@ async function handleAdmin(b, staff, team) {
   const domain = env('ALLOWED_DOMAIN', 'adas.com.sa').toLowerCase();
   const leave = await allLeave().catch((e) => { if (e.status === 503) return Object.assign([], { adjustments: [], layout: null }); throw e; });
 
-  const view = () => ({
-    ok: true, year, columns: Object.fromEntries(Object.keys(STAFF_LABELS).map((f) => [f, team.pos[f] != null])),
+  const devices = await allDevices().catch(() => null);
+  const view = (extra) => ({
+    ok: true, year, ...extra,
+    push: { ready: !!vapidKeys(), table: !!devices }, columns: Object.fromEntries(Object.keys(STAFF_LABELS).map((f) => [f, team.pos[f] != null])),
     canAdjust: !!(leave.layout && leave.layout.pos.type != null),
     people: team.map((s) => ({
       index: s.index, email: s.email, name: s.name, active: s.active, role: s.role, managerRef: s.managerRef,
       joinDate: s.joinDate, annualDays: s.override, opening: s.opening,
+      devices: devices ? devices.filter((d) => d.email === s.email).map((d) => d.device || 'Device') : [],
       balance: balanceFor(s, leave, year),
       adjustments: (leave.adjustments || []).filter((l) => l.email === s.email).sort((x, y) => y.start.localeCompare(x.start)).slice(0, 10)
         .map((l) => ({ date: l.start, days: l.days, reason: l.note, by: l.decidedBy })),
     })).sort((a, b2) => (b2.active - a.active) || a.name.localeCompare(b2.name)),
   });
   if (b.action === 'adminTeam') return view();
+
+  if (b.action === 'adminPushTest') {
+    if (!vapidKeys()) throw new HttpError(503, 'Notifications are not set up yet (VAPID keys in Vercel).');
+    if (!devices) throw new HttpError(503, DEVICES_MISSING);
+    const one = String(b.email || '').toLowerCase();
+    const emails = one ? [one] : team.filter((s) => s.active).map((s) => s.email);
+    const tally = {};
+    const sent = await pushTo(emails, { title: 'ADAS test notification', body: `Sent by ${staff.name}. If you can see this, notifications work on this device.`, tag: 'test' }, tally);
+    return view({ test: { at: riyadh().time, sent, emails, delivered: tally } });
+  }
 
   // validate + normalise the editable fields that were sent
   const clean = (f) => {
