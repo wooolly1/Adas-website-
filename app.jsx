@@ -3385,14 +3385,14 @@ function MicrosoftMark() {
   );
 }
 
-/* Working days (Sun–Thu, not a public holiday) between two YYYY-MM-DD dates, inclusive — mirrors the API */
+/* Working days (Sat–Thu, not a public holiday) between two YYYY-MM-DD dates, inclusive — mirrors the API */
 function leaveDays(start, end, holidays = []) {
   if (!start || !end || end < start) return { days: 0, skipped: [] };
   const byDate = Object.fromEntries(holidays.map((h) => [h.date, h.name]));
   let n = 0; const skipped = [];
   for (let d = new Date(start + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
     const w = d.getUTCDay(), iso = d.toISOString().slice(0, 10);
-    if (w === 5 || w === 6) continue;
+    if (w === 5) continue;
     if (iso in byDate) { if (!skipped.includes(byDate[iso])) skipped.push(byDate[iso] || 'Public holiday'); continue; }
     n++;
   }
@@ -3829,14 +3829,14 @@ function ManagerDashboard() {
           <table className="w-full text-sm">
             <thead><tr className="text-left">
               <th className="py-2 text-[10px] font-normal uppercase tracking-wider text-ink-700/50">Name</th>
-              {r.rows[0] && r.rows[0].daily.slice(0, 5).map((d) => <th key={d.date} className="px-0.5 py-2 text-center text-[10px] font-normal uppercase tracking-wider text-ink-700/50">{fmtD(d.date, { weekday: 'short' }).slice(0, 2)}<br />{d.date.slice(8)}</th>)}
+              {r.rows[0] && r.rows[0].daily.filter((d) => new Date(d.date + "T00:00:00Z").getUTCDay() !== 5).map((d) => <th key={d.date} className="px-0.5 py-2 text-center text-[10px] font-normal uppercase tracking-wider text-ink-700/50">{fmtD(d.date, { weekday: 'short' }).slice(0, 2)}<br />{d.date.slice(8)}</th>)}
               <th className="hidden py-2 text-right text-[10px] font-normal uppercase tracking-wider text-ink-700/50 sm:table-cell">Hours</th>
             </tr></thead>
             <tbody className="divide-y divide-ink-900/10">
               {r.rows.map((x) => (
                 <tr key={x.email}>
                   <td className="max-w-[90px] truncate py-2.5 pr-2 text-ink-900">{x.name}</td>
-                  {x.daily.slice(0, 5).map((d) => { const c = chip(d.status); return (
+                  {x.daily.filter((d) => new Date(d.date + "T00:00:00Z").getUTCDay() !== 5).map((d) => { const c = chip(d.status); return (
                     <td key={d.date} className="py-2.5 text-center" title={`${c.label}${d.in ? ' ' + d.in : ''}${d.note ? ' · ' + d.note : ''}`}>
                       {c.short ? <span className={'inline-grid h-6 min-w-[24px] place-items-center rounded-full px-1 text-[10px] ' + c.cls}>{c.short}</span> : <span className="text-ink-700/30">·</span>}
                     </td>); })}
