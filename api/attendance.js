@@ -391,6 +391,15 @@ function workingDays(start, end, holidays = new Set()) {
 }
 
 /* Holidays table (optional): Start | End (optional, for multi-day) | Name. Missing table = no holidays. */
+/** Why the office is closed on this day (Friday, Saturday or a public holiday), or null on a working day. */
+async function closedReason(day) {
+  const w = new Date(day + 'T00:00:00Z').getUTCDay();
+  if (w === 5) return 'Friday';
+  if (w === 6) return 'Saturday';
+  const h = (await holidayList()).find((x) => x.date === day);
+  return h ? (h.name || 'Public holiday') : null;
+}
+
 async function holidayList() {
   let rows;
   try { rows = await tableRows('Holidays', 'no-holidays'); }
@@ -1217,6 +1226,13 @@ module.exports = async function handler(req, res) {
     }
     const name = staff.name || user.name;
 
+    // office closed (Fri, Sat, public holiday): no check-in or short leave, unless there's an approved site visit
+    if (b.action === 'checkIn' || b.action === 'permRequest' || b.action === 'permOut') {
+      const closed = await closedReason(riyadh().day);
+      if (closed && !(await siteVisitToday(user.email))) throw new HttpError(409, `The office is closed today (${closed})${b.action === 'checkIn' ? ' — no check-in needed' : ''}.`);
+    }
+
+
     // short leave must never block check-in / check-out: if its table can't be read, carry on without it
     const permsOrNull = async () => {
       try { return await allPerms(); }
@@ -1224,11 +1240,11 @@ module.exports = async function handler(req, res) {
     };
 
     if (b.action === 'status') {
-      const [rec, perms, site] = await Promise.all([todayRecord(user.email), permsOrNull(), siteVisitToday(user.email)]);
       const day = riyadh().day;
+      const [rec, perms, site, closed] = await Promise.all([todayRecord(user.email), permsOrNull(), siteVisitToday(user.email), closedReason(day)]);
       const shortLeaveMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
         .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
-      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site), shortLeaveMin },
+      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site), shortLeaveMin, closed: site ? null : closed },
         perm: perms ? permSummary(perms, user.email) : null, pushKey: vapidKeys() ? env('VAPID_PUBLIC_KEY') : null,
         admin: !!staff.admin, notStaff: !!staff.notStaff });
     }
