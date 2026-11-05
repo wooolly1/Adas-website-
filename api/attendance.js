@@ -1064,6 +1064,19 @@ async function handleAdmin(b, staff, team) {
   });
   if (b.action === 'adminTeam') return view();
 
+  if (b.action === 'adminPushSend') {
+    if (!vapidKeys()) throw new HttpError(503, 'Notifications are not set up yet (VAPID keys in Vercel).');
+    if (!devices) throw new HttpError(503, DEVICES_MISSING);
+    const body = String(b.body || '').trim().slice(0, 300), title = String(b.title || '').trim().slice(0, 60) || 'ADAS Architecture';
+    if (!body) throw new HttpError(400, 'Please write the message.');
+    const active = team.filter((s) => s.active).map((s) => s.email);
+    const emails = Array.isArray(b.emails) && b.emails.length ? b.emails.map((e) => String(e).toLowerCase()).filter((e) => active.includes(e)) : active;
+    if (!emails.length) throw new HttpError(400, 'Choose at least one person.');
+    const tally = {};
+    const sent = await pushTo(emails, { title, body, tag: 'msg-' + Date.now() }, tally);
+    return view({ test: { at: riyadh().time, sent, emails, delivered: tally, message: true } });
+  }
+
   if (b.action === 'adminPushTest') {
     if (!vapidKeys()) throw new HttpError(503, 'Notifications are not set up yet (VAPID keys in Vercel).');
     if (!devices) throw new HttpError(503, DEVICES_MISSING);
