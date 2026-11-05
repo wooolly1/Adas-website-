@@ -4236,6 +4236,27 @@ function AdminPanel() {
           className="stamp text-ink-700/70 hover:text-gold-600">{adding ? 'Close' : '+ Add'}</button>
       </div>
 
+      {d.push && (() => {
+        const act = d.people.filter((p) => p.active), on = act.filter((p) => p.devices.length);
+        return (
+          <div className="mt-4 rounded-2xl bg-ink-900/[0.04] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-ink-900">🔔 Notifications on: <span className="font-medium">{on.length} of {act.length}</span></p>
+              <button disabled={!!busy || !d.push.ready || !d.push.table || !on.length} onClick={() => call('adminPushTest', {}, null)}
+                className={btn + ' bg-gold-400 px-4 py-2 text-ink-950 hover:bg-gold-300'}>{busy === 'adminPushTest' ? 'Sending…' : 'Test everyone'}</button>
+            </div>
+            {!d.push.ready ? <p className="mt-2 text-xs text-red-700">VAPID keys are missing in Vercel — add them and redeploy.</p>
+              : !d.push.table ? <p className="mt-2 text-xs text-red-700">Add the “Devices” table to the Excel workbook.</p>
+              : act.length > on.length && <p className="mt-2 text-xs text-ink-800/70">Not on yet: {act.filter((p) => !p.devices.length).map((p) => p.name || p.email).join(', ')}</p>}
+            {d.test && (
+              <p className="mt-2 text-xs text-ink-800/80">Test at {d.test.at}: delivered to {Object.keys(d.test.delivered).length} of {d.test.emails.length} {d.test.emails.length === 1 ? 'person' : 'people'}
+                {d.test.emails.filter((e) => !d.test.delivered[e]).length > 0 && <span className="text-red-700"> · not reached: {d.test.emails.filter((e) => !d.test.delivered[e]).map((e) => (d.people.find((p) => p.email === e) || {}).name || e).join(', ')}</span>}
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
       {adding && (
         <div className="mt-4 rounded-2xl border border-gold-400/40 p-4">
           <label className={lab}>Office email<input type="email" className={inp} placeholder="name@adas.com.sa" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
@@ -4252,13 +4273,21 @@ function AdminPanel() {
             <button onClick={() => edit(p)} className="flex w-full items-center justify-between gap-3 text-left">
               <span className={p.active ? 'text-ink-900' : 'text-ink-700/50 line-through'}>{p.name || p.email}
                 {p.role && <span className="ml-2 rounded-full bg-ink-900/5 px-2 py-0.5 text-[10px] text-ink-800/70">{p.role}</span>}</span>
-              <span className="shrink-0 text-xs text-ink-800/70">{p.balance.remaining} of {p.balance.allowance} days left</span>
+              <span className="shrink-0 text-xs text-ink-800/70">
+                {d.push && p.active && <span title={p.devices.length ? `Notifications on: ${p.devices.join(', ')}` : 'Notifications off'} className={'mr-2 ' + (p.devices.length ? '' : 'opacity-30 grayscale')}>🔔</span>}
+                {p.balance.remaining} of {p.balance.allowance} days left</span>
             </button>
             {open === p.email && (
               <div className="mt-3 space-y-4 rounded-2xl border border-ink-900/10 p-4">
                 <p className="text-xs text-ink-800/70">
                   {p.email} · {p.balance.entitlement} days for {d.year}{p.balance.carried ? ` + ${p.balance.carried} carried` : ''}{p.balance.adjusted ? ` ${p.balance.adjusted > 0 ? '+' : '−'} ${Math.abs(p.balance.adjusted)} adjusted` : ''} · {p.balance.used} taken{p.balance.pending ? ` · ${p.balance.pending} pending` : ''}
                 </p>
+                {d.push && (
+                  <div className="flex items-center justify-between gap-3 text-xs text-ink-800/80">
+                    <span>{p.devices.length ? `🔔 On: ${p.devices.join(', ')}` : '🔕 Notifications not turned on yet'}</span>
+                    {p.devices.length > 0 && d.push.ready && <button disabled={!!busy} onClick={() => call('adminPushTest', { email: p.email }, null)} className="stamp text-gold-600 hover:text-gold-700">{busy === 'adminPushTest' ? 'Sending…' : 'Send test'}</button>}
+                  </div>
+                )}
                 {fields}
                 <button disabled={!!busy} onClick={() => call('adminSave', { email: p.email, fields: payload(form) }, `Saved ${form.name || p.email}.`)}
                   className={btn + ' w-full bg-ink-900 text-bone-100 hover:bg-ink-800'}>{busy === 'adminSave' ? 'Saving…' : 'Save changes'}</button>
