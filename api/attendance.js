@@ -260,8 +260,10 @@ function dayRules() {
   const closes = toMin(env('CHECKIN_CLOSES', '11:00'));
   return { workStart: hmOf(start), lateAfter: hmOf(lateAfter), closes: hmOf(closes), startMin: start, lateAfterMin: lateAfter, closesMin: closes };
 }
+const isSaturday = (day) => new Date(day + 'T00:00:00Z').getUTCDay() === 6;
 const summary = (rec, site = null) => {
-  const rules = dayRules();
+  // Saturday is a day off, but anyone working that day may check in: no late / cut-off rules
+  const rules = isSaturday(riyadh().day) ? null : dayRules();
   const sp = site ? siteParts(site.note) : null;
   const siteInfo = site ? { name: sp.name, from: sp.from, to: sp.to, waiveLate: siteWindow(site, '00:00').waiveLate } : null;
   if (!rec) return { checkIn: '', checkOut: '', hours: '', lateMin: 0, rules, site: siteInfo };
@@ -269,7 +271,7 @@ const summary = (rec, site = null) => {
   const inMin = toMin(checkIn);
   const waive = siteInfo && siteInfo.waiveLate;
   return { checkIn, checkOut: String(rec.row[8] || ''), hours: rec.row[13] === '' ? '' : String(rec.row[13]),
-    lateMin: !waive && inMin != null && inMin > rules.lateAfterMin ? inMin - rules.startMin : 0, rules, site: siteInfo };
+    lateMin: rules && !waive && inMin != null && inMin > rules.lateAfterMin ? inMin - rules.startMin : 0, rules, site: siteInfo };
 };
 
 /** Site visits are stored with their hours in the note: "[11:00–14:00] Al Rawdah villa". */
@@ -380,21 +382,22 @@ async function leaveLayout() {
 const LEAVE_MISSING = 'Annual leave is not set up yet. Please ask the admin to add the "Leave" table to the workbook.';
 const isoDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
 
-/** Working days (Sat–Thu, not a public holiday) from start to end inclusive. */
+/** Working days (Sun–Thu, not a public holiday) from start to end inclusive. */
 function workingDays(start, end, holidays = new Set()) {
   let n = 0;
   for (let d = new Date(start + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
     const w = d.getUTCDay();
-    if (w !== 5 && !holidays.has(d.toISOString().slice(0, 10))) n++;
+    if (w !== 5 && w !== 6 && !holidays.has(d.toISOString().slice(0, 10))) n++;
   }
   return n;
 }
 
 /* Holidays table (optional): Start | End (optional, for multi-day) | Name. Missing table = no holidays. */
-/** Why the office is closed on this day (Friday or a public holiday), or null on a working day. */
+/** Why the office is closed on this day (Friday, Saturday or a public holiday), or null on a working day. */
 async function closedReason(day) {
   const w = new Date(day + 'T00:00:00Z').getUTCDay();
   if (w === 5) return 'Friday';
+  if (w === 6) return 'Saturday';
   const h = (await holidayList()).find((x) => x.date === day);
   return h ? (h.name || 'Public holiday') : null;
 }
@@ -815,7 +818,7 @@ async function handleLeave(b, staff, name, team) {
 /* ------------------------------------------------- short leave (permission) */
 /* Excel table "Permissions" (columns matched by header):
  *   Date | Email | Name | Out | In | Minutes | Reason | Status
- * Limits: PERMISSION_DAY_MIN (default 90) per day, PERMISSION_WEEK_MIN (default 360) per Sat–Thu week. */
+ * Limits: PERMISSION_DAY_MIN (default 90) per day, PERMISSION_WEEK_MIN (default 360) per Sun–Thu week. */
 const PERM_FIELDS = {
   date: ['date', 'day'], email: ['email'], name: ['name', 'employee'], out: ['out', 'outtime', 'left', 'stepout'],
   in: ['in', 'intime', 'back', 'returned', 'backin'], minutes: ['minutes', 'mins', 'duration'],
@@ -852,7 +855,7 @@ function permRow(p, layout) {
 }
 /** Sunday that starts the week containing `day`. */
 function weekStart(day) {
-  const d = new Date(day + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 1) % 7)); // weeks start on Saturday
+  const d = new Date(day + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - d.getUTCDay());
   return d.toISOString().slice(0, 10);
 }
 function permSummary(perms, email, now = riyadh()) {
@@ -892,7 +895,7 @@ async function closeOpenPerm(perms, email, time) {
 
 /* ---------------------------------------------------------- monthly report */
 /* Office day starts WORK_START (default 09:00); a check-in after WORK_START + LATE_GRACE_MIN
- * (default 15) is "late". Absent = a working day (Sat–Thu, not a holiday, on/after joining, up to
+ * (default 15) is "late". Absent = a working day (Sun–Thu, not a holiday, on/after joining, up to
  * today) with no check-in and no approved leave. */
 const toMin = (hm) => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
 
@@ -931,7 +934,7 @@ async function handleReport(b, staff, team) {
   const holidayName = Object.fromEntries(holidays.map((h) => [h.date, h.name || 'Public holiday']));
   const rules = dayRules();
   const nowMin = toMin(riyadh().time);
-  const isWorkday = (d) => { const w = new Date(d + 'T00:00:00Z').getUTCDay(); return w !== 5 && !holidayName[d]; };
+  const isWorkday = (d) => { const w = new Date(d + 'T00:00:00Z').getUTCDay(); return w !== 5 && w !== 6 && !holidayName[d]; };
   // a day is "due" (could be absent) once check-in has closed
   const isOver = (d) => d < today || (d === today && nowMin > rules.closesMin);
 
@@ -962,7 +965,7 @@ async function handleReport(b, staff, team) {
           shortMin: 0, outNow: '', inLoc: a.inLoc, outLoc: a.outLoc };
       }
       if (a && a.in) {
-        const late = toMin(a.in) > rules.lateAfterMin ? toMin(a.in) - rules.startMin : 0;
+        const late = isWorkday(d) && toMin(a.in) > rules.lateAfterMin ? toMin(a.in) - rules.startMin : 0;
         const openPerm = d === today && myPerms.find((p) => p.date === d && p.out && !p.in);
         return { ...out, status: late ? 'late' : 'ontime', in: a.in, out: a.out, hours: a.hours, lateMin: late, inLoc: a.inLoc, outLoc: a.outLoc,
           shortMin: myPerms.filter((p) => p.date === d && p.in).reduce((x, p) => x + p.minutes, 0), outNow: openPerm ? openPerm.out : '' };
@@ -1177,7 +1180,7 @@ async function handleAdmin(b, staff, team) {
  * Vercel sends "Authorization: Bearer <CRON_SECRET>" when CRON_SECRET is set. */
 async function runCron(job) {
   const day = riyadh().day, w = new Date(day + 'T00:00:00Z').getUTCDay();
-  if (w === 5) return { skipped: 'weekend' };
+  if (w === 5 || w === 6) return { skipped: 'weekend' };
   const [team, att, leave, holidays] = await Promise.all([loadStaff(), tableRows('Attendance'), allLeave().catch(() => []), holidayList()]);
   if (holidays.some((h) => h.date === day)) return { skipped: 'holiday' };
   const today = {};
@@ -1225,10 +1228,10 @@ module.exports = async function handler(req, res) {
     }
     const name = staff.name || user.name;
 
-    // office closed (Friday, public holiday): no check-in or short leave, unless there's an approved site visit
+    // office closed (Fri, Sat, public holiday): no check-in or short leave, unless there's an approved site visit
     if (b.action === 'checkIn' || b.action === 'permRequest' || b.action === 'permOut') {
       const closed = await closedReason(riyadh().day);
-      if (closed && !(await siteVisitToday(user.email))) throw new HttpError(409, `The office is closed today (${closed})${b.action === 'checkIn' ? ' — no check-in needed' : ''}.`);
+      if (closed && !(closed === 'Saturday' && b.action === 'checkIn') && !(await siteVisitToday(user.email))) throw new HttpError(409, `The office is closed today (${closed})${b.action === 'checkIn' ? ' — no check-in needed' : ''}.`);
     }
 
 
@@ -1243,7 +1246,7 @@ module.exports = async function handler(req, res) {
       const [rec, perms, site, closed] = await Promise.all([todayRecord(user.email), permsOrNull(), siteVisitToday(user.email), closedReason(day)]);
       const shortLeaveMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
         .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
-      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site), shortLeaveMin, closed: site ? null : closed },
+      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site), shortLeaveMin, closed: site || closed === 'Saturday' ? null : closed, optional: closed === 'Saturday' },
         perm: perms ? permSummary(perms, user.email) : null, pushKey: vapidKeys() ? env('VAPID_PUBLIC_KEY') : null,
         admin: !!staff.admin, notStaff: !!staff.notStaff });
     }
@@ -1368,7 +1371,7 @@ module.exports = async function handler(req, res) {
       if (await todayRecord(user.email)) throw new HttpError(409, 'You have already checked in today.');
       const { day, time } = riyadh();
       const rules = dayRules();
-      if (!win.waiveLate && toMin(time) > rules.closesMin) {
+      if (!win.waiveLate && !isSaturday(day) && toMin(time) > rules.closesMin) {
         throw new HttpError(409, `Check-in closed at ${rules.closes}. Today is recorded as absent unless you have approved leave — please speak to your manager.`);
       }
       const row = [day, user.email, name, time, p.distance, p.accuracy, p.lat, p.lng, '', '', '', '', '', ''];

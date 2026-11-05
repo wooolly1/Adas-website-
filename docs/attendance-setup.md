@@ -192,7 +192,7 @@ Only Annual leave uses the annual balance. Every type goes to the same manager f
 ### Manager dashboard
 
 On the Team page, managers see their team and HR/Admin see everyone, in two tabs, each by **Day**,
-**Week** (Sat–Thu) or **Month**, with arrows to move back and forward:
+**Week** (Sun–Thu) or **Month**, with arrows to move back and forward:
 
 - **Attendance** — Day: each person's status (on time, late, absent, on leave, not in yet, out on
   short leave). Week: a grid of each person × each day. Month: present days, hours, late arrivals and
@@ -215,7 +215,7 @@ Set `Date`, `Out` and `In` to *Text*. **With approval:** while checked in, staff
 approves or declines in **Short leave requests** on the Team page. Once approved, staff tap
 **Step out** and **Back in** (both check they're at the office). Unused approvals expire at the end of
 the day; time beyond what was approved is marked `Over approved time by N min`. Limits: **1.5 hours a day in total** (can be split into several trips) and **6 hours a week**
-(Sat–Thu) — Step out is blocked when used up, and time beyond the limit is marked
+(Sun–Thu) — Step out is blocked when used up, and time beyond the limit is marked
 `Over limit by N min` in `Status`. Checking out while
 stepped out closes it at check-out time. Short leave actually taken (stepped out and back) is
 **deducted from that day's `Hours`** in the Attendance table; requests that were never used are not. Change the limits with `PERMISSION_DAY_MIN` (default 90)
@@ -234,7 +234,7 @@ once and tap **Turn on notifications**:
 
 Who gets what: managers — new leave, site-visit and short-leave requests; staff — approvals,
 declines and cancellations; everyone — **"Check-in closes at 11:00"** (10:30, if not checked in and
-not on leave) and **"Don't forget to check out"** (18:30, if still checked in), Sat–Thu, not on holidays.
+not on leave) and **"Don't forget to check out"** (18:30, if still checked in), Sun–Thu, not on holidays.
 
 Setup (once):
 1. Excel: add a table **`Devices`** with `Email · Endpoint · P256dh · Auth · Added · Device`.
