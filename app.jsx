@@ -3385,14 +3385,14 @@ function MicrosoftMark() {
   );
 }
 
-/* Working days (Sat–Thu, not a public holiday) between two YYYY-MM-DD dates, inclusive — mirrors the API */
+/* Working days (Sun–Thu, not a public holiday) between two YYYY-MM-DD dates, inclusive — mirrors the API */
 function leaveDays(start, end, holidays = []) {
   if (!start || !end || end < start) return { days: 0, skipped: [] };
   const byDate = Object.fromEntries(holidays.map((h) => [h.date, h.name]));
   let n = 0; const skipped = [];
   for (let d = new Date(start + 'T00:00:00Z'); d <= new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
     const w = d.getUTCDay(), iso = d.toISOString().slice(0, 10);
-    if (w === 5) continue;
+    if (w === 5 || w === 6) continue;
     if (iso in byDate) { if (!skipped.includes(byDate[iso])) skipped.push(byDate[iso] || 'Public holiday'); continue; }
     n++;
   }
@@ -3716,6 +3716,11 @@ function downloadCsv(name, rows) {
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+/* Week grid columns: Sun–Thu, plus Saturday only if someone worked that day (Friday never). */
+const weekCol = (r) => (d) => {
+  const w = new Date(d.date + 'T00:00:00Z').getUTCDay();
+  return w !== 5 && (w !== 6 || r.rows.some((x) => x.daily.some((y) => y.date === d.date && y.in)));
+};
 function ManagerDashboard() {
   const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
   const [tab, setTab] = useState('attendance');
@@ -3829,14 +3834,14 @@ function ManagerDashboard() {
           <table className="w-full text-sm">
             <thead><tr className="text-left">
               <th className="py-2 text-[10px] font-normal uppercase tracking-wider text-ink-700/50">Name</th>
-              {r.rows[0] && r.rows[0].daily.filter((d) => new Date(d.date + "T00:00:00Z").getUTCDay() !== 5).map((d) => <th key={d.date} className="px-0.5 py-2 text-center text-[10px] font-normal uppercase tracking-wider text-ink-700/50">{fmtD(d.date, { weekday: 'short' }).slice(0, 2)}<br />{d.date.slice(8)}</th>)}
+              {r.rows[0] && r.rows[0].daily.filter(weekCol(r)).map((d) => <th key={d.date} className="px-0.5 py-2 text-center text-[10px] font-normal uppercase tracking-wider text-ink-700/50">{fmtD(d.date, { weekday: 'short' }).slice(0, 2)}<br />{d.date.slice(8)}</th>)}
               <th className="hidden py-2 text-right text-[10px] font-normal uppercase tracking-wider text-ink-700/50 sm:table-cell">Hours</th>
             </tr></thead>
             <tbody className="divide-y divide-ink-900/10">
               {r.rows.map((x) => (
                 <tr key={x.email}>
                   <td className="max-w-[90px] truncate py-2.5 pr-2 text-ink-900">{x.name}</td>
-                  {x.daily.filter((d) => new Date(d.date + "T00:00:00Z").getUTCDay() !== 5).map((d) => { const c = chip(d.status); return (
+                  {x.daily.filter(weekCol(r)).map((d) => { const c = chip(d.status); return (
                     <td key={d.date} className="py-2.5 text-center" title={`${c.label}${d.in ? ' ' + d.in : ''}${d.note ? ' · ' + d.note : ''}`}>
                       {c.short ? <span className={'inline-grid h-6 min-w-[24px] place-items-center rounded-full px-1 text-[10px] ' + c.cls}>{c.short}</span> : <span className="text-ink-700/30">·</span>}
                     </td>); })}
@@ -4469,6 +4474,9 @@ function TeamPage() {
                     <p className="mt-1 text-sm text-ink-800/80">{today.closed} · no check-in needed. Enjoy your day off.</p>
                   </div>
                 ) : (<>
+                {today.optional && !today.checkIn && (
+                  <p className="mt-6 rounded-2xl bg-gold-400/10 p-4 text-sm text-ink-800">Saturday is a day off. Only check in if you're working today. There's no late time or cut-off.</p>
+                )}
                 <div className="mt-8 grid grid-cols-2 gap-3">
                   {[['Check in', today.checkIn], ['Check out', today.checkOut]].map(([k, v]) => (
                     <div key={k} className="rounded-2xl border border-ink-900/10 p-4">
@@ -4517,7 +4525,7 @@ function TeamPage() {
                 {!today.checkIn && !(today.rules && !(today.site && today.site.waiveLate) && clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' }) > today.rules.closes)
                   && <p className="mt-3 text-center text-xs text-ink-700/60">Check out unlocks after you check in.</p>}
 
-                {me.perm && today.checkIn && !today.checkOut && (
+                {me.perm && today.checkIn && !today.checkOut && !today.optional && (
                   <ShortLeave perm={me.perm} busy={busy} reason={reason} setReason={setReason} planned={planned} setPlanned={setPlanned} btnPair={btnPair} onGo={permGo} />
                 )}
                 </>)}
