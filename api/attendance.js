@@ -877,7 +877,7 @@ async function closeOpenPerm(perms, email, time) {
   const before = permSummary(perms.filter((p) => p !== open), email, { day: now.day, time: open.out });
   open.in = time; open.minutes = Math.max(0, toMin(time) - toMin(open.out));
   open.status = open.minutes > before.leftMin ? `Over limit by ${open.minutes - before.leftMin} min`
-    : open.planned && open.minutes > open.planned ? `Over approved time by ${open.minutes - open.planned} min` : 'Active';
+    : open.planned && open.minutes > open.planned ? `Over approved time by ${open.minutes - open.planned} min` : 'Returned';
   await graph('PATCH', `/tables/Permissions/rows/itemAt(index=${open.index})`, { values: [permRow(open, perms.layout)] }, PERM_MISSING);
   return open;
 }

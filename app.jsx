@@ -319,7 +319,7 @@ const TIMELINE = [
 const STATS = [
   { value: 80, suffix: '+', label: 'Projects Completed' },
   { value: 6, suffix: '+', label: 'Years of Practice' },
-  { value: 10, suffix: '', label: 'Team Members' },
+  { value: 9, suffix: '', label: 'Team Members' },
   { value: 1, suffix: '', label: 'Country, Many Cities' },
 ];
 
@@ -1545,7 +1545,7 @@ function AboutStory() {
           <div className="mt-10 grid grid-cols-3 gap-6 border-t border-ink-900/10 pt-8">
             <div><p className="font-titling text-4xl font-bold text-gold-600">80+</p><p className="stamp text-ink-700/70">Projects</p></div>
             <div><p className="font-titling text-4xl font-bold text-gold-600">6+</p><p className="stamp text-ink-700/70">Years</p></div>
-            <div><p className="font-titling text-4xl font-bold text-gold-600">10</p><p className="stamp text-ink-700/70">Team Members</p></div>
+            <div><p className="font-titling text-4xl font-bold text-gold-600">9</p><p className="stamp text-ink-700/70">Team Members</p></div>
           </div>
         </div>
       </div>
