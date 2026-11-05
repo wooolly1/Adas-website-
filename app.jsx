@@ -4181,6 +4181,7 @@ function AdminPanel() {
   const [adj, setAdj] = useState({ days: '', reason: '' });
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState('');
+  const [note, setNote] = useState({ open: false, title: '', body: '', to: [] });
   const call = async (action, body, okText) => {
     setBusy(action); setMsg(null);
     try {
@@ -4248,8 +4249,33 @@ function AdminPanel() {
             {!d.push.ready ? <p className="mt-2 text-xs text-red-700">VAPID keys are missing in Vercel — add them and redeploy.</p>
               : !d.push.table ? <p className="mt-2 text-xs text-red-700">Add the “Devices” table to the Excel workbook.</p>
               : act.length > on.length && <p className="mt-2 text-xs text-ink-800/70">Not on yet: {act.filter((p) => !p.devices.length).map((p) => p.name || p.email).join(', ')}</p>}
+            {d.push.ready && d.push.table && (
+              <div className="mt-3 border-t border-ink-900/10 pt-3">
+                <button onClick={() => setNote({ ...note, open: !note.open })} className="stamp text-gold-600 hover:text-gold-700">{note.open ? 'Close message' : '✉︎ Send a message to the team'}</button>
+                {note.open && (
+                  <div className="mt-3 space-y-3">
+                    <label className={lab}>Title (optional)<input className={inp} maxLength={60} placeholder="ADAS Architecture" value={note.title} onChange={(e) => setNote({ ...note, title: e.target.value })} /></label>
+                    <label className={lab}>Message<textarea rows={3} maxLength={300} className={inp} placeholder="e.g. Team meeting tomorrow at 10:00 in the studio." value={note.body} onChange={(e) => setNote({ ...note, body: e.target.value })} /></label>
+                    <div>
+                      <p className={lab}>Send to</p>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => setNote({ ...note, to: [] })}
+                          className={'rounded-full border px-3 py-1 text-xs ' + (!note.to.length ? 'border-gold-400 bg-gold-400/15 text-ink-900' : 'border-ink-900/15 text-ink-800/70')}>Everyone</button>
+                        {act.map((p) => {
+                          const sel = note.to.includes(p.email);
+                          return <button type="button" key={p.email} onClick={() => setNote({ ...note, to: sel ? note.to.filter((e) => e !== p.email) : [...note.to, p.email] })}
+                            className={'rounded-full border px-3 py-1 text-xs ' + (sel ? 'border-gold-400 bg-gold-400/15 text-ink-900' : 'border-ink-900/15 text-ink-800/70') + (p.devices.length ? '' : ' opacity-50')}>{p.name || p.email}</button>;
+                        })}
+                      </div>
+                    </div>
+                    <button disabled={!!busy || !note.body.trim()} onClick={async () => { const r = await call('adminPushSend', { title: note.title, body: note.body, emails: note.to }, null); if (r) setNote({ open: false, title: '', body: '', to: [] }); }}
+                      className={btn + ' w-full bg-ink-900 text-bone-100 hover:bg-ink-800'}>{busy === 'adminPushSend' ? 'Sending…' : `Send to ${note.to.length ? note.to.length + (note.to.length === 1 ? ' person' : ' people') : 'everyone'}`}</button>
+                  </div>
+                )}
+              </div>
+            )}
             {d.test && (
-              <p className="mt-2 text-xs text-ink-800/80">Test at {d.test.at}: delivered to {Object.keys(d.test.delivered).length} of {d.test.emails.length} {d.test.emails.length === 1 ? 'person' : 'people'}
+              <p className="mt-2 text-xs text-ink-800/80">{d.test.message ? 'Message sent' : 'Test'} at {d.test.at}: delivered to {Object.keys(d.test.delivered).length} of {d.test.emails.length} {d.test.emails.length === 1 ? 'person' : 'people'}
                 {d.test.emails.filter((e) => !d.test.delivered[e]).length > 0 && <span className="text-red-700"> · not reached: {d.test.emails.filter((e) => !d.test.delivered[e]).map((e) => (d.people.find((p) => p.email === e) || {}).name || e).join(', ')}</span>}
               </p>
             )}
