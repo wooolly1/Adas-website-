@@ -210,8 +210,13 @@ function anyDay(v) {
 /** All staff rows (active and inactive), read once per request. */
 async function loadStaff() {
   const [pos, rows] = await Promise.all([staffLayout(), tableRows('Staff')]);
-  return rows.map((row) => staffFrom(row, pos)).filter((s) => s.email);
+  const team = rows.map((row, index) => ({ ...staffFrom(row, pos), index, raw: row })).filter((s) => s.email);
+  team.pos = pos; team.width = rows[0] ? rows[0].length : Math.max(...Object.values(pos)) + 1;
+  return team;
 }
+
+/* Admin: office@adas.com.sa (ADMIN_EMAILS) or Role = Admin / HR. Can sign in without a Staff row. */
+const adminEmails = () => env('ADMIN_EMAILS', 'office@adas.com.sa').toLowerCase().split(/[\s,;]+/).filter(Boolean);
 
 /** Who approves this employee's leave:
  *  1. their own Manager, if set;
@@ -415,6 +420,7 @@ const LEAVE_TYPES = {
   unpaid:      { label: 'Unpaid', hint: 'Not paid; your manager decides.' },
   site:        { label: 'Site visit', work: true, needsNote: true,
                  hint: 'Work outside the office today (client site, meeting). Choose the hours; once approved you can check in or out from the site during them.' },
+  adjust:      { label: 'Balance adjustment', hidden: true }, // admin +/- annual days; never treated as leave
 };
 function leaveTypeKey(v) {
   const t = normHeader(v);
@@ -425,6 +431,7 @@ function leaveTypeKey(v) {
   if (t.startsWith('paternity') || t.includes('baby') || t.includes('birth')) return 'paternity';
   if (t.startsWith('hajj')) return 'hajj';
   if (t.startsWith('unpaid')) return 'unpaid';
+  if (t.startsWith('adjust') || t.startsWith('balanceadjust') || t === 'credit' || t === 'correction') return 'adjust';
   if (t.startsWith('site') || t.startsWith('field') || t.startsWith('outside') || t === 'external') return 'site';
   return LEAVE_TYPES[t] ? t : 'annual';
 }
@@ -456,8 +463,11 @@ const publicLeave = ({ index, raw, ...l }) => {
 
 async function allLeave() {
   const layout = await leaveLayout();
-  const rows = (await tableRows('Leave', LEAVE_MISSING)).map((row, i) => leaveFrom(row, i, layout))
+  const all = (await tableRows('Leave', LEAVE_MISSING)).map((row, i) => leaveFrom(row, i, layout))
     .filter((l) => l.id || l.email); // skip blank rows inside the table
+  // admin balance adjustments only change balances — they are never "leave" on a date
+  const rows = all.filter((l) => l.type !== 'adjust');
+  rows.adjustments = all.filter((l) => l.type === 'adjust' && /^approved$/i.test(l.status));
   rows.layout = layout;
   return rows;
 }
@@ -504,20 +514,22 @@ function entitlementFor(staff, year, asOf) {
 function balanceFor(staff, leave, year, asOf = riyadh().day) {
   const mine = leave.filter((l) => l.email === staff.email && l.type === 'annual');
   const sum = (y, re) => mine.filter((l) => l.start.slice(0, 4) === String(y) && re.test(l.status)).reduce((a, l) => a + l.days, 0);
+  const adj = (y) => (leave.adjustments || []).filter((l) => l.email === staff.email && l.start.slice(0, 4) === String(y)).reduce((a, l) => a + (Number(l.days) || 0), 0);
   const startYear = leaveStartYear(), cap = env('LEAVE_CARRY_MAX') === '' ? Infinity : Number(env('LEAVE_CARRY_MAX'));
   let carried = 0;
   if (year >= startYear) {
     carried = staff.opening || 0;
     for (let y = startYear; y < year; y++) {
-      const left = entitlementFor(staff, y) + carried - sum(y, /^approved$/i);
+      const left = entitlementFor(staff, y) + adj(y) + carried - sum(y, /^approved$/i);
       carried = Math.max(0, Math.min(cap, left));
     }
   }
   const entitlement = entitlementFor(staff, year, asOf);
   const fullYear = entitlementFor(staff, year);
   const used = sum(year, /^approved$/i), pending = sum(year, /^pending$/i);
-  const allowance = half(entitlement + carried);
-  return { year, entitlement, fullYear, earning: entitlement < fullYear, carried: half(carried), allowance, used, pending,
+  const adjusted = adj(year);
+  const allowance = half(entitlement + carried + adjusted);
+  return { year, entitlement, fullYear, earning: entitlement < fullYear, carried: half(carried), adjusted, allowance, used, pending,
     remaining: half(allowance - used - pending),
     joinDate: staff.joinDate || '', serviceYears: staff.joinDate ? Math.max(0, serviceYears(staff.joinDate, riyadh().day)) : null };
 }
@@ -655,7 +667,7 @@ async function handleLeave(b, staff, name, team) {
       holidays: holidays.filter((h) => h.date >= riyadh().day).slice(0, 60) };
     out.approvers = approversFor(staff, team).map((a) => a.name || a.email);
     out.typeColumn = leave.layout.pos.type != null;
-    out.types = Object.entries(LEAVE_TYPES).map(([key, t]) => {
+    out.types = Object.entries(LEAVE_TYPES).filter(([, t]) => !t.hidden).map(([key, t]) => {
       const taken = leave.filter((l) => l.email === staff.email && l.type === key && /^(approved|pending)$/i.test(l.status));
       return { key, label: t.label, hint: t.hint || '', perYear: t.perYear || null, perRequest: t.perRequest || null, once: !!t.once,
         usedThisYear: taken.filter((l) => l.start.slice(0, 4) === String(year)).reduce((a, l) => a + l.days, 0),
@@ -1025,6 +1037,106 @@ async function handleLeaveReport(b, staff, team) {
     leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label) };
 }
 
+
+/* ------------------------------------------------------------- admin panel */
+const STAFF_LABELS = { email: 'Email', name: 'Name', active: 'Active', role: 'Role', annualDays: 'Annual Days',
+  managerRef: 'Manager', joinDate: 'Joining Date', opening: 'Opening Balance' };
+
+async function handleAdmin(b, staff, team) {
+  if (!staff.admin) throw new HttpError(403, 'Only the admin can do this.');
+  const year = Number(riyadh().day.slice(0, 4));
+  const domain = env('ALLOWED_DOMAIN', 'adas.com.sa').toLowerCase();
+  const leave = await allLeave().catch((e) => { if (e.status === 503) return Object.assign([], { adjustments: [], layout: null }); throw e; });
+
+  const view = () => ({
+    ok: true, year, columns: Object.fromEntries(Object.keys(STAFF_LABELS).map((f) => [f, team.pos[f] != null])),
+    canAdjust: !!(leave.layout && leave.layout.pos.type != null),
+    people: team.map((s) => ({
+      index: s.index, email: s.email, name: s.name, active: s.active, role: s.role, managerRef: s.managerRef,
+      joinDate: s.joinDate, annualDays: s.override, opening: s.opening,
+      balance: balanceFor(s, leave, year),
+      adjustments: (leave.adjustments || []).filter((l) => l.email === s.email).sort((x, y) => y.start.localeCompare(x.start)).slice(0, 10)
+        .map((l) => ({ date: l.start, days: l.days, reason: l.note, by: l.decidedBy })),
+    })).sort((a, b2) => (b2.active - a.active) || a.name.localeCompare(b2.name)),
+  });
+  if (b.action === 'adminTeam') return view();
+
+  // validate + normalise the editable fields that were sent
+  const clean = (f) => {
+    const out = {};
+    if ('name' in f) { out.name = String(f.name || '').trim().slice(0, 80); if (!out.name) throw new HttpError(400, 'Name is required.'); }
+    if ('active' in f) out.active = !!f.active;
+    if ('role' in f) { out.role = String(f.role || '').trim(); if (out.role && !/^(manager|admin|hr)$/i.test(out.role)) throw new HttpError(400, 'Role must be blank, Manager, HR or Admin.'); }
+    if ('managerRef' in f) {
+      out.managerRef = String(f.managerRef || '').trim().toLowerCase();
+      if (out.managerRef && !team.some((s) => s.email === out.managerRef)) throw new HttpError(400, 'The manager must be someone on the staff list (their email).');
+    }
+    if ('joinDate' in f) { out.joinDate = String(f.joinDate || ''); if (out.joinDate && !isoDay(out.joinDate)) throw new HttpError(400, 'Joining date is not a valid date.'); }
+    if ('annualDays' in f) {
+      out.annualDays = f.annualDays === '' || f.annualDays == null ? '' : Number(f.annualDays);
+      if (out.annualDays !== '' && !(out.annualDays > 0 && out.annualDays <= 60)) throw new HttpError(400, 'Annual days must be between 1 and 60 (or blank for automatic 22 / 30).');
+    }
+    if ('opening' in f) {
+      out.opening = f.opening === '' || f.opening == null ? '' : Number(f.opening);
+      if (out.opening !== '' && !(out.opening >= 0 && out.opening <= 365)) throw new HttpError(400, 'Opening balance must be between 0 and 365 days.');
+    }
+    const missing = Object.keys(out).filter((k) => team.pos[k] == null && !(k === 'active' && out[k] === true));
+    if (missing.length) throw new HttpError(503, `Please add ${missing.length > 1 ? 'these columns' : 'this column'} to the Staff table first: ${missing.map((k) => STAFF_LABELS[k]).join(', ')}.`);
+    return out;
+  };
+  const writeRow = (base, out) => {
+    const row = Array.from({ length: team.width }, (_, i) => (base && base[i] != null ? base[i] : ''));
+    for (const [k, v] of Object.entries(out)) if (team.pos[k] != null) row[team.pos[k]] = v;
+    return row;
+  };
+
+  if (b.action === 'adminSave') {
+    const s = team.find((x) => x.email === String(b.email || '').toLowerCase());
+    if (!s) throw new HttpError(404, 'That person was not found. Please refresh.');
+    const out = clean(b.fields || {});
+    if (out.managerRef === s.email) throw new HttpError(400, 'Someone cannot be their own manager.');
+    await graph('PATCH', `/tables/Staff/rows/itemAt(index=${s.index})`, { values: [writeRow(s.raw, out)] });
+    Object.assign(s, out.annualDays !== undefined ? { override: out.annualDays === '' ? null : out.annualDays } : {},
+      out.opening !== undefined ? { opening: Number(out.opening) || 0 } : {}, out.name !== undefined ? { name: out.name } : {},
+      out.active !== undefined ? { active: out.active } : {}, out.role !== undefined ? { role: out.role, manager: /^(manager|admin|hr)$/i.test(out.role), admin: /^(admin|hr)$/i.test(out.role) } : {},
+      out.managerRef !== undefined ? { managerRef: out.managerRef } : {}, out.joinDate !== undefined ? { joinDate: out.joinDate } : {});
+    return { ...view(), saved: s.email };
+  }
+
+  if (b.action === 'adminAdd') {
+    const email = String(b.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+$/.test(email) || !email.endsWith('@' + domain)) throw new HttpError(400, `Please use an @${domain} email.`);
+    if (team.some((x) => x.email === email)) throw new HttpError(409, 'This person is already on the staff list.');
+    const out = { email, active: true, ...clean({ name: b.fields && b.fields.name, ...(b.fields || {}) }) };
+    await graph('POST', '/tables/Staff/rows', { values: [writeRow(null, out)] });
+    team.push({ ...staffFrom(writeRow(null, out), team.pos), index: team.length, raw: writeRow(null, out) });
+    return { ...view(), saved: email };
+  }
+
+  if (b.action === 'adminAdjust') {
+    const s = team.find((x) => x.email === String(b.email || '').toLowerCase());
+    if (!s) throw new HttpError(404, 'That person was not found. Please refresh.');
+    if (!leave.layout) throw new HttpError(503, LEAVE_MISSING);
+    if (leave.layout.pos.type == null) throw new HttpError(503, 'Balance adjustments need a "Type" column in the Leave table.');
+    const days = Math.round(Number(b.days) * 2) / 2;
+    if (!days || Math.abs(days) > 60) throw new HttpError(400, 'Enter a number of days between -60 and 60 (halves allowed), not 0.');
+    const reason = String(b.reason || '').trim().slice(0, 200);
+    if (!reason) throw new HttpError(400, 'Please write a reason — it is kept with the record.');
+    const y = Number(b.year) || year;
+    if (y < year - 1 || y > year + 1) throw new HttpError(400, 'Adjust this year, last year or next year only.');
+    const { day, time } = riyadh();
+    const date = y === year ? day : `${y}-${y < year ? '12-31' : '01-01'}`;
+    const l = { id: 'A' + Date.now().toString(36).toUpperCase() + crypto.randomBytes(2).toString('hex').toUpperCase(), requested: `${day} ${time}`,
+      email: s.email, name: s.name, start: date, end: date, days, note: reason, status: 'Approved', decidedBy: staff.name || staff.email, decidedAt: `${day} ${time}`, type: 'adjust' };
+    await graph('POST', '/tables/Leave/rows', { values: [leaveRow(l, leave.layout)] }, LEAVE_MISSING);
+    leave.adjustments.push(l);
+    await notify([s.email], `Annual leave balance ${days > 0 ? 'increased' : 'reduced'} by ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}`,
+      `${staff.name || 'The admin'} ${days > 0 ? 'added' : 'removed'} ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ${days > 0 ? 'to' : 'from'} your ${y} annual leave. Reason: ${reason}\\n\\nhttps://adas.com.sa/#/team`);
+    return { ...view(), saved: s.email };
+  }
+  throw new HttpError(400, 'Unknown action.');
+}
+
 /* --------------------------------------------------------------- handler */
 
 /* Scheduled reminders (vercel.json "crons"): GET /api/attendance?cron=checkin | checkout.
@@ -1067,8 +1179,16 @@ module.exports = async function handler(req, res) {
     const idToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     const user = await verifyIdToken(idToken);
     const team = await loadStaff();
-    const staff = team.find((s) => s.email === user.email && s.active);
+    let staff = team.find((s) => s.email === user.email && s.active);
+    const isAdminEmail = adminEmails().includes(user.email);
+    if (staff && isAdminEmail) staff = { ...staff, admin: true, manager: true };
+    if (!staff && isAdminEmail) {
+      staff = { email: user.email, name: 'ADAS Office', active: true, role: 'Admin', manager: true, admin: true, managerRef: '', override: null, joinDate: '', opening: 0, notStaff: true };
+    }
     if (!staff) throw new HttpError(403, 'Your account is not on the team list. Please ask the admin to add you.');
+    if (staff.notStaff && /^(checkIn|checkOut|perm(Request|Cancel|Out|In)|leaveRequest|leaveCancel)$/.test(String(b.action))) {
+      throw new HttpError(403, 'The office admin account isn\'t on the staff list, so it can\'t check in or request leave.');
+    }
     const name = staff.name || user.name;
 
     // short leave must never block check-in / check-out: if its table can't be read, carry on without it
@@ -1083,7 +1203,8 @@ module.exports = async function handler(req, res) {
       const shortLeaveMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
         .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
       return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site), shortLeaveMin },
-        perm: perms ? permSummary(perms, user.email) : null, pushKey: vapidKeys() ? env('VAPID_PUBLIC_KEY') : null });
+        perm: perms ? permSummary(perms, user.email) : null, pushKey: vapidKeys() ? env('VAPID_PUBLIC_KEY') : null,
+        admin: !!staff.admin, notStaff: !!staff.notStaff });
     }
 
     if (b.action === 'pushSubscribe' || b.action === 'pushUnsubscribe' || b.action === 'pushTest') {
@@ -1236,6 +1357,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, today: { ...summary({ row }, site), shortLeaveMin: shortMin }, perm: perms ? permSummary(perms, user.email) : null });
     }
 
+    if (String(b.action || '').startsWith('admin')) return res.status(200).json(await handleAdmin(b, staff, team));
     if (b.action === 'report') return res.status(200).json(await handleReport(b, staff, team));
     if (b.action === 'leaveReport') return res.status(200).json(await handleLeaveReport(b, staff, team));
 
