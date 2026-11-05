@@ -3406,7 +3406,7 @@ const LEAVE_TONE = {
   Rejected: 'bg-red-500/10 text-red-700', Cancelled: 'bg-ink-900/5 text-ink-700/60',
 };
 
-function AnnualLeave() {
+function AnnualLeave({ managerOnly = false }) {
   const [data, setData] = useState(null);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -3469,12 +3469,13 @@ function AnnualLeave() {
 
   return (
     <div className="glass mt-6 rounded-3xl p-6 shadow-soft md:p-10">
-      <p className="stamp text-gold-600">Annual leave {bal ? bal.year : ''}</p>
+      <p className="stamp text-gold-600">{managerOnly ? 'Leave & site visit requests' : `Annual leave ${bal ? bal.year : ''}`}</p>
 
       {!data && !msg && <p className="mt-4 stamp text-ink-700/60">Loading…</p>}
 
       {bal && (
         <>
+        {!managerOnly && (<>
           <div className="mt-4 flex items-end gap-3">
             <span className="font-display text-6xl leading-none text-ink-900">{bal.remaining}</span>
             <span className="pb-1 text-sm text-ink-800/70">of {bal.allowance} days left</span>
@@ -3482,6 +3483,7 @@ function AnnualLeave() {
           <p className="mt-2 text-xs text-ink-800/70">
             {bal.earning ? `${bal.entitlement} of ${bal.fullYear} days earned so far in ${bal.year}` : `${bal.entitlement} days for ${bal.year}`}
             {bal.carried > 0 && ` + ${bal.carried} carried from ${bal.year - 1}`}
+            {bal.adjusted ? ` ${bal.adjusted > 0 ? '+' : '−'} ${Math.abs(bal.adjusted)} adjusted by HR` : ''}
             {bal.joinDate && ` · joined ${new Date(bal.joinDate + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`}
             {bal.serviceYears != null && bal.serviceYears >= 1 && ` · ${bal.serviceYears} year${bal.serviceYears === 1 ? '' : 's'} of service`}
           </p>
@@ -3623,6 +3625,7 @@ function AnnualLeave() {
             </div>
           )}
 
+        </>)}
           {data.manager && (
             <div className="mt-8 border-t border-ink-900/10 pt-6">
               <p className="font-display text-2xl text-ink-900">Approvals</p>
@@ -4169,6 +4172,127 @@ function NotificationsCard({ pushKey }) {
   );
 }
 
+function AdminPanel() {
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [open, setOpen] = useState(null);       // email being edited
+  const [form, setForm] = useState({});
+  const [adj, setAdj] = useState({ days: '', reason: '' });
+  const [adding, setAdding] = useState(false);
+  const [q, setQ] = useState('');
+  const call = async (action, body, okText) => {
+    setBusy(action); setMsg(null);
+    try {
+      const r = await attCall(action, body);
+      if (!r.ok) throw new Error(r.error);
+      setD(r); if (okText) setMsg({ type: 'ok', text: okText }); return r;
+    } catch (e) { setMsg({ type: 'error', text: e.message || 'Something went wrong.' }); return null; }
+    finally { setBusy(''); }
+  };
+  useEffect(() => { call('adminTeam'); }, []);
+  if (!d) return msg ? <div className="glass mt-6 rounded-3xl p-6 shadow-soft"><p className="text-sm text-red-700">{msg.text}</p></div> : null;
+
+  const edit = (p) => {
+    if (open === p.email) { setOpen(null); return; }
+    setOpen(p.email); setAdding(false); setMsg(null); setAdj({ days: '', reason: '' });
+    setForm({ name: p.name, joinDate: p.joinDate || '', annualDays: p.annualDays == null ? '' : p.annualDays, opening: p.opening || '', managerRef: p.managerRef || '', role: p.role || '', active: p.active });
+  };
+  const managers = d.people.filter((p) => p.active);
+  const inp = 'mt-1 w-full rounded-xl border border-ink-900/12 bg-transparent px-3 py-2 text-sm text-ink-900 outline-none focus:border-gold-400 focus:ring-0';
+  const lab = 'block text-xs text-ink-800/70';
+  const btn = 'magnetic-btn inline-flex items-center justify-center rounded-full px-5 py-2.5 text-[11px] uppercase tracking-[0.18em] transition disabled:opacity-40';
+  const colNote = (f) => (!d.columns[f] ? <span className="text-red-700"> · add “{({ joinDate: 'Joining Date', annualDays: 'Annual Days', opening: 'Opening Balance', managerRef: 'Manager', role: 'Role' })[f]}” column</span> : null);
+  const fields = (
+    <div className="grid grid-cols-2 gap-3">
+      <label className={lab + ' col-span-2'}>Name<input className={inp} value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+      <label className={lab}>Joining date{colNote('joinDate')}<input type="date" className={inp} value={form.joinDate || ''} onChange={(e) => setForm({ ...form, joinDate: e.target.value })} /></label>
+      <label className={lab}>Annual days{colNote('annualDays')}<input type="number" min="1" max="60" step="0.5" placeholder="Auto (22 / 30)" className={inp} value={form.annualDays} onChange={(e) => setForm({ ...form, annualDays: e.target.value })} /></label>
+      <label className={lab}>Opening balance (before {d.year}){colNote('opening')}<input type="number" min="0" step="0.5" placeholder="0" className={inp} value={form.opening} onChange={(e) => setForm({ ...form, opening: e.target.value })} /></label>
+      <label className={lab}>Role{colNote('role')}
+        <select className={inp} value={form.role || ''} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+          <option value="">Staff</option><option value="Manager">Manager</option><option value="HR">HR</option><option value="Admin">Admin</option>
+        </select></label>
+      <label className={lab + ' col-span-2'}>Manager (approves their requests){colNote('managerRef')}
+        <select className={inp} value={form.managerRef || ''} onChange={(e) => setForm({ ...form, managerRef: e.target.value })}>
+          <option value="">— Any manager —</option>
+          {managers.filter((m) => m.email !== open).map((m) => <option key={m.email} value={m.email}>{m.name || m.email}</option>)}
+        </select></label>
+      <label className="col-span-2 flex items-center gap-2 text-sm text-ink-900">
+        <input type="checkbox" checked={!!form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="rounded border-ink-900/20 text-gold-500 focus:ring-0" />
+        Active (can sign in, counted in reports)
+      </label>
+    </div>
+  );
+  // send only the fields whose columns exist, so a missing optional column doesn't block saving
+  const payload = (f) => Object.fromEntries(Object.entries(f).filter(([k]) => k === 'name' || k === 'active' || d.columns[k]));
+  const list = d.people.filter((p) => !q || (p.name + ' ' + p.email).toLowerCase().includes(q.toLowerCase()));
+
+  return (
+    <div className="glass mt-6 rounded-3xl p-6 shadow-soft md:p-10">
+      <div className="flex items-center justify-between gap-3">
+        <p className="stamp text-gold-600">Admin panel</p>
+        <button onClick={() => { setAdding(!adding); setOpen(null); setMsg(null); setForm({ name: '', email: '', joinDate: '', annualDays: '', opening: '', managerRef: '', role: '', active: true }); }}
+          className="stamp text-ink-700/70 hover:text-gold-600">{adding ? 'Close' : '+ Add'}</button>
+      </div>
+
+      {adding && (
+        <div className="mt-4 rounded-2xl border border-gold-400/40 p-4">
+          <label className={lab}>Office email<input type="email" className={inp} placeholder="name@adas.com.sa" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+          <div className="mt-3">{fields}</div>
+          <button disabled={!!busy || !form.email || !form.name} onClick={async () => { const { email, ...f } = form; const r = await call('adminAdd', { email, fields: payload(f) }, `${form.name} added.`); if (r) setAdding(false); }}
+            className={btn + ' mt-4 w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>{busy === 'adminAdd' ? 'Adding…' : 'Add to team'}</button>
+        </div>
+      )}
+
+      {d.people.length > 6 && <input className={inp + ' mt-4'} placeholder="Search name or email" value={q} onChange={(e) => setQ(e.target.value)} />}
+      <ul className="mt-3 divide-y divide-ink-900/10">
+        {list.map((p) => (
+          <li key={p.email} className="py-3">
+            <button onClick={() => edit(p)} className="flex w-full items-center justify-between gap-3 text-left">
+              <span className={p.active ? 'text-ink-900' : 'text-ink-700/50 line-through'}>{p.name || p.email}
+                {p.role && <span className="ml-2 rounded-full bg-ink-900/5 px-2 py-0.5 text-[10px] text-ink-800/70">{p.role}</span>}</span>
+              <span className="shrink-0 text-xs text-ink-800/70">{p.balance.remaining} of {p.balance.allowance} days left</span>
+            </button>
+            {open === p.email && (
+              <div className="mt-3 space-y-4 rounded-2xl border border-ink-900/10 p-4">
+                <p className="text-xs text-ink-800/70">
+                  {p.email} · {p.balance.entitlement} days for {d.year}{p.balance.carried ? ` + ${p.balance.carried} carried` : ''}{p.balance.adjusted ? ` ${p.balance.adjusted > 0 ? '+' : '−'} ${Math.abs(p.balance.adjusted)} adjusted` : ''} · {p.balance.used} taken{p.balance.pending ? ` · ${p.balance.pending} pending` : ''}
+                </p>
+                {fields}
+                <button disabled={!!busy} onClick={() => call('adminSave', { email: p.email, fields: payload(form) }, `Saved ${form.name || p.email}.`)}
+                  className={btn + ' w-full bg-ink-900 text-bone-100 hover:bg-ink-800'}>{busy === 'adminSave' ? 'Saving…' : 'Save changes'}</button>
+
+                <div className="border-t border-ink-900/10 pt-4">
+                  <p className="text-sm text-ink-900">Add or remove annual leave days</p>
+                  {!d.canAdjust ? <p className="mt-1 text-xs text-red-700">Needs a “Type” column in the Leave table.</p> : (
+                    <>
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        <label className={lab}>Days (+ / −)<input type="number" step="0.5" placeholder="2 or -1" className={inp} value={adj.days} onChange={(e) => setAdj({ ...adj, days: e.target.value })} /></label>
+                        <label className={lab + ' col-span-2'}>Reason (kept on record)<input className={inp} placeholder="e.g. Overtime in October" value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })} /></label>
+                      </div>
+                      <button disabled={!!busy || !Number(adj.days) || !adj.reason.trim()}
+                        onClick={async () => { const r = await call('adminAdjust', { email: p.email, days: Number(adj.days), reason: adj.reason },
+                          `${Number(adj.days) > 0 ? 'Added' : 'Removed'} ${Math.abs(Number(adj.days))} day(s) ${Number(adj.days) > 0 ? 'to' : 'from'} ${p.name}.`); if (r) setAdj({ days: '', reason: '' }); }}
+                        className={btn + ' mt-3 w-full border border-ink-900/15 text-ink-900 hover:border-gold-400'}>{busy === 'adminAdjust' ? 'Saving…' : 'Apply adjustment'}</button>
+                    </>
+                  )}
+                  {p.adjustments.length > 0 && (
+                    <ul className="mt-3 space-y-1 text-xs text-ink-800/70">
+                      {p.adjustments.map((a, i) => <li key={i}>{a.date} · <span className={a.days > 0 ? 'text-gold-700' : 'text-red-700'}>{a.days > 0 ? '+' : ''}{a.days}d</span> · {a.reason} · {a.by}</li>)}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      {msg && <p role="status" className={'mt-4 rounded-xl p-3 text-sm ' + (msg.type === 'error' ? 'bg-red-500/10 text-red-700' : 'bg-gold-400/10 text-ink-800')}>{msg.text}</p>}
+    </div>
+  );
+}
+
 function TeamPage() {
   const [step, setStep] = useState('loading'); // loading | signin | home
   const [me, setMe] = useState(null);           // { name, email, today }
@@ -4282,6 +4406,9 @@ function TeamPage() {
                   {' · '}{clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' })}
                 </p>
 
+                {me.notStaff ? (
+                  <p className="mt-6 rounded-2xl bg-gold-400/10 p-4 text-sm text-ink-800">Admin account — you can see every report and approve every request below, and manage team members and leave days in the Admin panel.</p>
+                ) : (<>
                 <div className="mt-8 grid grid-cols-2 gap-3">
                   {[['Check in', today.checkIn], ['Check out', today.checkOut]].map(([k, v]) => (
                     <div key={k} className="rounded-2xl border border-ink-900/10 p-4">
@@ -4333,6 +4460,7 @@ function TeamPage() {
                 {me.perm && today.checkIn && !today.checkOut && (
                   <ShortLeave perm={me.perm} busy={busy} reason={reason} setReason={setReason} planned={planned} setPlanned={setPlanned} btnPair={btnPair} onGo={permGo} />
                 )}
+                </>)}
                 <button onClick={signOut} className="stamp mt-8 w-full text-center text-ink-700/60 hover:text-gold-600">Sign out</button>
               </div>
             )}
@@ -4343,9 +4471,10 @@ function TeamPage() {
               </p>
             )}
           </div>
+          {step === 'home' && me && me.admin && <AdminPanel />}
           {step === 'home' && me && <NotificationsCard pushKey={me.pushKey} />}
           {step === 'home' && me && <ShortLeaveQueue />}
-          {step === 'home' && me && <AnnualLeave />}
+          {step === 'home' && me && <AnnualLeave managerOnly={!!me.notStaff} />}
           {step === 'home' && me && <ManagerDashboard />}
           <p className="mt-6 text-center text-xs leading-relaxed text-ink-700/60">
             Your location is read only when you press Check in or Check out, to confirm you are at the office.

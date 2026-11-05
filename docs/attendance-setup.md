@@ -244,3 +244,21 @@ Setup (once):
    everyone has to turn notifications on again.
 3. Reminders run from `vercel.json` (`crons`): 07:30 and 15:30 UTC = 10:30 and 18:30 Riyadh. On the
    Hobby plan Vercel may run them up to an hour late; on Pro they run on time.
+
+## Office admin (office@adas.com.sa)
+
+`office@adas.com.sa` signs in as the **admin**. It doesn't need a row in the Staff table, and it has
+no check-in card. It sees every report, approval and request for the whole team, and it gets an
+**Admin panel** on the Team page where you can:
+
+- edit each person's name, joining date, annual days (leave blank for automatic 22/30),
+  opening balance, role, manager and active status;
+- **add or remove leave days**. Type a number such as `2` or `-1` and a reason. Each adjustment is
+  saved as an approved row in the Leave table (Type = `adjust`), so there's always a record of who
+  changed what and why, and the employee gets a notification;
+- add a new team member.
+
+To make more admins, set the Vercel env var `ADMIN_EMAILS` (comma-separated). It defaults to
+`office@adas.com.sa`. Editing a field needs its column in the Staff table (`Joining Date`,
+`Annual Days`, `Opening Balance`, `Manager`, `Role`), and adjustments need the `Type` column in the
+Leave table. The panel tells you if one is missing.
