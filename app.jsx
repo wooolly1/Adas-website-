@@ -4463,6 +4463,11 @@ function TeamPage() {
 
                 {me.notStaff ? (
                   <p className="mt-6 rounded-2xl bg-gold-400/10 p-4 text-sm text-ink-800">Admin account — you can see every report and approve every request below, and manage team members and leave days in the Admin panel.</p>
+                ) : today.closed && !today.checkIn ? (
+                  <div className="mt-6 rounded-2xl bg-gold-400/10 p-5 text-center">
+                    <p className="font-display text-2xl text-ink-900">Office closed today</p>
+                    <p className="mt-1 text-sm text-ink-800/80">{today.closed} · no check-in needed. Enjoy your day off.</p>
+                  </div>
                 ) : (<>
                 <div className="mt-8 grid grid-cols-2 gap-3">
                   {[['Check in', today.checkIn], ['Check out', today.checkOut]].map(([k, v]) => (
