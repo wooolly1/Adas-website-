@@ -260,10 +260,24 @@ function dayRules() {
   const closes = toMin(env('CHECKIN_CLOSES', '11:00'));
   return { workStart: hmOf(start), lateAfter: hmOf(lateAfter), closes: hmOf(closes), startMin: start, lateAfterMin: lateAfter, closesMin: closes };
 }
+/** Day rules, shifted when the person has approved morning short leave: on time until arrival + the usual grace. */
+function rulesFor(morning) {
+  const base = dayRules();
+  const to = morning ? siteParts(morning.note).to : '';
+  if (!to) return base;
+  const start = toMin(to), grace = base.lateAfterMin - base.startMin, lateAfter = start + grace;
+  return { ...base, workStart: to, startMin: start, lateAfter: hmOf(lateAfter), lateAfterMin: lateAfter,
+    closesMin: Math.max(base.closesMin, lateAfter), closes: hmOf(Math.max(base.closesMin, lateAfter)), morningUntil: to };
+}
+/** Approved morning short leave for this person on this day, or null. Never throws. */
+async function morningLeave(email, day = riyadh().day) {
+  try { return (await allLeave()).find((l) => l.email === email && l.type === 'morning' && /^approved$/i.test(l.status) && l.start === day) || null; }
+  catch (e) { return null; }
+}
 const isSaturday = (day) => new Date(day + 'T00:00:00Z').getUTCDay() === 6;
-const summary = (rec, site = null) => {
+const summary = (rec, site = null, morning = null) => {
   // Saturday is a day off, but anyone working that day may check in: no late / cut-off rules
-  const rules = isSaturday(riyadh().day) ? null : dayRules();
+  const rules = isSaturday(riyadh().day) ? null : rulesFor(morning);
   const sp = site ? siteParts(site.note) : null;
   const siteInfo = site ? { name: sp.name, from: sp.from, to: sp.to, waiveLate: siteWindow(site, '00:00').waiveLate } : null;
   if (!rec) return { checkIn: '', checkOut: '', hours: '', lateMin: 0, rules, site: siteInfo };
@@ -431,6 +445,8 @@ const LEAVE_TYPES = {
   unpaid:      { label: 'Unpaid', hint: 'Not paid; your manager decides.' },
   site:        { label: 'Site visit', work: true, needsNote: true,
                  hint: 'Work outside the office today (client site, meeting). Choose the hours; once approved you can check in or out from the site during them.' },
+  morning:     { label: 'Short leave (morning)', short: true,
+                 hint: 'An appointment before work: choose the day and the time you\'ll arrive. Uses your short leave (1.5 h a day, 6 h a week), not annual days. Once approved, you\'re on time if you check in by then.' },
   adjust:      { label: 'Balance adjustment', hidden: true }, // admin +/- annual days; never treated as leave
 };
 function leaveTypeKey(v) {
@@ -443,6 +459,7 @@ function leaveTypeKey(v) {
   if (t.startsWith('hajj')) return 'hajj';
   if (t.startsWith('unpaid')) return 'unpaid';
   if (t.startsWith('adjust') || t.startsWith('balanceadjust') || t === 'credit' || t === 'correction') return 'adjust';
+  if (t.startsWith('shortleave') || t.startsWith('morning') || t.startsWith('latearrival') || t === 'appointment') return 'morning';
   if (t.startsWith('site') || t.startsWith('field') || t.startsWith('outside') || t === 'external') return 'site';
   return LEAVE_TYPES[t] ? t : 'annual';
 }
@@ -467,6 +484,7 @@ function leaveRow(l, layout) {
   return row;
 }
 const publicLeave = ({ index, raw, ...l }) => {
+  if (l.type === 'morning') { const sp = siteParts(l.note); return { ...l, note: sp.name, siteFrom: sp.from, siteTo: sp.to }; }
   if (l.type !== 'site') return l;
   const sp = siteParts(l.note);
   return { ...l, note: sp.from ? `${sp.name} · ${sp.from}–${sp.to}` : sp.name, siteFrom: sp.from, siteTo: sp.to };
@@ -709,6 +727,32 @@ async function handleLeave(b, staff, name, team) {
     b = { ...b, start: day, end: day, note: `[${from}–${to}] ${place}` };
   }
 
+  let morningMin = 0;
+  if (b.action === 'leaveRequest' && b.type === 'morning') {
+    const date = String(b.date || b.start || ''), to = String(b.to || ''), why = String(b.note || '').trim().slice(0, 240);
+    const now = riyadh(), rules = dayRules(), lim = permLimits();
+    if (!isoDay(date)) throw new HttpError(400, 'Please choose the day of the appointment.');
+    if (date < now.day) throw new HttpError(400, 'That day has already passed.');
+    if (!/^\d{2}:\d{2}$/.test(to)) throw new HttpError(400, 'Please choose the time you\'ll arrive.');
+    morningMin = toMin(to) - rules.startMin;
+    if (morningMin <= 0) throw new HttpError(400, `The arrival time must be after ${rules.workStart}.`);
+    if (morningMin > lim.day) throw new HttpError(400, `Short leave is up to ${lim.day} minutes a day, so arrive by ${hmOf(rules.startMin + lim.day)} at the latest.`);
+    if (date === now.day) {
+      if (await todayRecord(staff.email)) throw new HttpError(409, 'You have already checked in today. Use "Step out" for short leave during the day.');
+      if (toMin(to) <= toMin(now.time)) throw new HttpError(400, 'That arrival time has already passed.');
+    }
+    // weekly limit: short leave already taken that week + other morning requests (approved or pending)
+    const perms = await allPerms().catch(() => []);
+    const ws = weekStart(date), we = (() => { const e = new Date(ws + 'T00:00:00Z'); e.setUTCDate(e.getUTCDate() + 6); return e.toISOString().slice(0, 10); })();
+    const usedWeek = perms.filter((p) => p.email === staff.email && p.date >= ws && p.date <= we && p.in && !p.morning).reduce((a, p) => a + p.minutes, 0)
+      + leave.filter((l) => l.email === staff.email && l.type === 'morning' && /^(approved|pending)$/i.test(l.status) && l.start >= ws && l.start <= we)
+        .reduce((a, l) => { const sp = siteParts(l.note); return a + Math.max(0, toMin(sp.to) - toMin(sp.from)); }, 0);
+    if (usedWeek + morningMin > lim.week) {
+      throw new HttpError(400, `That would be ${Math.round((usedWeek + morningMin) / 6) / 10} h of short leave that week; the limit is ${lim.week / 60} h (${Math.max(0, lim.week - usedWeek)} min left).`);
+    }
+    b = { ...b, start: date, end: date, note: `[${rules.workStart}–${to}] ${why}` };
+  }
+
   if (b.action === 'leaveRequest') {
     const start = String(b.start || ''), end = String(b.end || ''), note = String(b.note || '').slice(0, 300);
     const type = LEAVE_TYPES[b.type] ? b.type : 'annual', rule = LEAVE_TYPES[type];
@@ -717,14 +761,15 @@ async function handleLeave(b, staff, name, team) {
     }
     if (!isoDay(start) || !isoDay(end)) throw new HttpError(400, 'Please choose a start and end date.');
     if (end < start) throw new HttpError(400, 'The end date is before the start date.');
-    if (rule.needsNote && !note.trim()) throw new HttpError(400, 'Please write the site or client name.');
+    if (rule.needsNote && !note.replace(/^\[[^\]]*\]\s*/, '').trim()) throw new HttpError(400, 'Please write the site or client name.');
     const earliest = new Date(riyadh().day + 'T00:00:00Z'); earliest.setUTCDate(earliest.getUTCDate() - (rule.backdateDays || 0));
     if (start < earliest.toISOString().slice(0, 10)) {
       throw new HttpError(400, rule.backdateDays ? `${rule.label} leave can start at most ${rule.backdateDays} days ago.` : 'Leave can only be requested from today onwards.');
     }
     if (start.slice(0, 4) !== end.slice(0, 4)) throw new HttpError(400, 'Please split leave that crosses the new year into two requests.');
-    const days = workingDays(start, end, holidaySet);
-    if (days === 0) throw new HttpError(400, 'Those dates are only weekends or public holidays — no working days to request.');
+    const wd = workingDays(start, end, holidaySet);
+    if (wd === 0) throw new HttpError(400, rule.short ? 'That day is a weekend or public holiday.' : 'Those dates are only weekends or public holidays — no working days to request.');
+    const days = rule.short ? 0 : wd; // morning short leave uses minutes, not days
     const clash = leave.find((l) => l.email === staff.email && /^(pending|approved)$/i.test(l.status) && l.start <= end && start <= l.end);
     if (clash) throw new HttpError(409, `You already have a ${clash.status.toLowerCase()} request for ${clash.start} — ${clash.end}.`);
     if (type === 'annual') {
@@ -757,7 +802,12 @@ async function handleLeave(b, staff, name, team) {
       start, end, days, note: pdf ? `${note ? note + ' · ' : ''}PDF: ${pdf.name}` : note, status: 'Pending', decidedBy: '', decidedAt: '', type };
     await graph('POST', '/tables/Leave/rows', { values: [leaveRow(l, leave.layout)] }, LEAVE_MISSING);
     leave.push({ ...l, index: leave.length });
-    const sent = await notify(managers, `${rule.label} leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
+    const sp = siteParts(l.note);
+    const sent = rule.short
+      ? await notify(managers, `Short leave request: ${name}, ${start} until ${sp.to}`,
+        `${name} has an appointment on ${start} and asks to arrive at ${sp.to} instead of ${sp.from} (${morningMin} min of short leave).\n`
+        + `${sp.name ? 'Reason: ' + sp.name + '\n' : ''}\nReview it at https://adas.com.sa/#/team`)
+      : await notify(managers, `${rule.label} leave request: ${name}, ${days} day${days === 1 ? '' : 's'}`,
       `${name} requested ${rule.label.toLowerCase()} leave from ${start} to ${end} (${days} working day${days === 1 ? '' : 's'}).\n`
       + `${note ? 'Note: ' + note + '\n' : ''}${pdf ? `The medical report is attached (${pdf.name}).\n` : ''}\nReview it at https://adas.com.sa/#/team`,
       pdf ? [pdf] : []);
@@ -845,6 +895,14 @@ async function allPerms() {
       minutes: Number(v('minutes')) || 0, reason: String(v('reason') || ''), status: String(v('status') || ''),
       planned: Number(v('planned')) || 0, decidedBy: String(v('decidedBy') || '') };
   }).filter((p) => p.email);
+  // approved morning short leave (Leave table) counts against the same daily / weekly short-leave limits
+  const leave = await allLeave().catch(() => []);
+  for (const l of leave) {
+    if (l.type !== 'morning' || !/^approved$/i.test(l.status)) continue;
+    const sp = siteParts(l.note), minutes = Math.max(0, toMin(sp.to) - toMin(sp.from));
+    rows.push({ index: -1, raw: null, date: l.start, email: l.email, name: l.name, out: sp.from, in: sp.to, minutes, reason: sp.name,
+      status: 'Morning', planned: minutes, decidedBy: l.decidedBy, morning: true });
+  }
   rows.layout = layout;
   return rows;
 }
@@ -954,7 +1012,9 @@ async function handleReport(b, staff, team) {
     const myPerms = perms.filter((p) => p.email === s.email && p.date >= from && p.date <= to);
     const leaveOn = (d) => myLeave.find((l) => d >= l.start && d <= l.end);
     const daily = days.map((d) => {
-      const a = att1[d], lv = leaveOn(d);
+      const mlv = myLeave.find((l) => l.type === 'morning' && l.start === d) || null;
+      const lv = myLeave.find((l) => l.type !== 'morning' && d >= l.start && d <= l.end), a = att1[d];
+      const dr = mlv ? rulesFor(mlv) : rules;
       const out = { date: d };
       if (s.joinDate && d < s.joinDate) return { ...out, status: 'not-joined' };
       const siteLv = lv && lv.type === 'site' ? lv : null;
@@ -965,9 +1025,9 @@ async function handleReport(b, staff, team) {
           shortMin: 0, outNow: '', inLoc: a.inLoc, outLoc: a.outLoc };
       }
       if (a && a.in) {
-        const late = isWorkday(d) && toMin(a.in) > rules.lateAfterMin ? toMin(a.in) - rules.startMin : 0;
+        const late = isWorkday(d) && toMin(a.in) > dr.lateAfterMin ? toMin(a.in) - dr.startMin : 0;
         const openPerm = d === today && myPerms.find((p) => p.date === d && p.out && !p.in);
-        return { ...out, status: late ? 'late' : 'ontime', in: a.in, out: a.out, hours: a.hours, lateMin: late, inLoc: a.inLoc, outLoc: a.outLoc,
+        return { ...out, status: late ? 'late' : 'ontime', morningUntil: dr.morningUntil || '', in: a.in, out: a.out, hours: a.hours, lateMin: late, inLoc: a.inLoc, outLoc: a.outLoc,
           shortMin: myPerms.filter((p) => p.date === d && p.in).reduce((x, p) => x + p.minutes, 0), outNow: openPerm ? openPerm.out : '' };
       }
       if (!isWorkday(d)) return { ...out, status: 'off', note: holidayName[d] || 'Weekend' };
@@ -979,7 +1039,7 @@ async function handleReport(b, staff, team) {
       }
       if (lv) return { ...out, status: 'leave', note: label(lv.type) };
       if (d > today) return { ...out, status: 'future' };
-      if (!isOver(d)) return { ...out, status: 'waiting' };
+      if (!isOver(d) || (d === today && mlv && nowMin <= dr.closesMin)) return { ...out, status: 'waiting', morningUntil: dr.morningUntil || '' };
       return { ...out, status: 'absent' };
     });
     const worked = daily.filter((x) => x.status === 'ontime' || x.status === 'late' || (x.status === 'site' && x.in));
@@ -1011,7 +1071,7 @@ async function handleReport(b, staff, team) {
   }, {});
   return { ok: true, period: range.kind, date: range.date, from, to, until: range.until, month: from.slice(0, 7),
     workStart: rules.workStart, graceMin: Number(env('LATE_GRACE_MIN', '15')), lateAfter: rules.lateAfter, closes: rules.closes,
-    leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label), holidays: days.filter((d) => holidayName[d]).map((d) => ({ date: d, name: holidayName[d] })),
+    leaveTypes: Object.values(LEAVE_TYPES).filter((t) => !t.short).map((t) => t.label), holidays: days.filter((d) => holidayName[d]).map((d) => ({ date: d, name: holidayName[d] })),
     totals, rows };
 }
 
@@ -1024,11 +1084,12 @@ async function handleLeaveReport(b, staff, team) {
   const holidaySet = new Set(holidays.map((h) => h.date));
   const inScope = new Set(scope.map((s) => s.email));
   const label = (k) => (LEAVE_TYPES[k] || LEAVE_TYPES.annual).label;
-  const clip = (l) => workingDays(l.start < from ? from : l.start, l.end > to ? to : l.end, holidaySet);
+  const clip = (l) => (LEAVE_TYPES[l.type] || {}).short ? 0 : workingDays(l.start < from ? from : l.start, l.end > to ? to : l.end, holidaySet);
   const entries = leave.filter((l) => inScope.has(l.email) && /^(approved|pending)$/i.test(l.status) && l.start <= to && l.end >= from)
     .sort((x, y) => x.start.localeCompare(y.start))
     .map((l) => ({ id: l.id, name: l.name || l.email, email: l.email, type: label(l.type), start: l.start, end: l.end,
-      days: l.days, daysInPeriod: clip(l), status: l.status, note: publicLeave(l).note, work: !!(LEAVE_TYPES[l.type] || {}).work }));
+      days: l.days, daysInPeriod: clip(l), status: l.status, note: publicLeave(l).note + (l.type === 'morning' ? ` · arrives ${publicLeave(l).siteTo}` : ''),
+      work: !!(LEAVE_TYPES[l.type] || {}).work, short: !!(LEAVE_TYPES[l.type] || {}).short }));
   const year = Number(from.slice(0, 4));
   const people = scope.map((s) => {
     const bal = balanceFor(s, leave, year);
@@ -1041,11 +1102,11 @@ async function handleLeaveReport(b, staff, team) {
   }).sort((a, b2) => a.name.localeCompare(b2.name));
   const onLeave = range.kind === 'day' ? entries.filter((e) => /^approved$/i.test(e.status)) : [];
   return { ok: true, period: range.kind, date: range.date, from, to, year, entries, people, onLeave,
-    totals: { approvedDays: entries.filter((e) => /^approved$/i.test(e.status) && !e.work).reduce((a, e) => a + e.daysInPeriod, 0),
+    totals: { approvedDays: entries.filter((e) => /^approved$/i.test(e.status) && !e.work && !e.short).reduce((a, e) => a + e.daysInPeriod, 0),
       pending: entries.filter((e) => /^pending$/i.test(e.status)).length,
-      people: new Set(entries.filter((e) => /^approved$/i.test(e.status) && !e.work).map((e) => e.email)).size,
+      people: new Set(entries.filter((e) => /^approved$/i.test(e.status) && !e.work && !e.short).map((e) => e.email)).size,
       siteVisits: entries.filter((e) => /^approved$/i.test(e.status) && e.work).length },
-    leaveTypes: Object.values(LEAVE_TYPES).map((t) => t.label) };
+    leaveTypes: Object.values(LEAVE_TYPES).filter((t) => !t.short).map((t) => t.label) };
 }
 
 
@@ -1185,7 +1246,7 @@ async function runCron(job) {
   if (holidays.some((h) => h.date === day)) return { skipped: 'holiday' };
   const today = {};
   for (const row of att) if (cellDay(row[0]) === day) today[String(row[1]).trim().toLowerCase()] = { in: cellTime(row[3]), out: row[8] === '' ? '' : cellTime(row[8]) };
-  const onLeave = (email) => leave.find((l) => l.email === email && /^approved$/i.test(l.status) && l.start <= day && l.end >= day && l.type !== 'site');
+  const onLeave = (email) => leave.find((l) => l.email === email && /^approved$/i.test(l.status) && l.start <= day && l.end >= day && l.type !== 'site' && l.type !== 'morning');
   const active = team.filter((s) => s.active && (!s.joinDate || s.joinDate <= day) && !onLeave(s.email));
   const rules = dayRules();
   let who = [], msg;
@@ -1243,10 +1304,10 @@ module.exports = async function handler(req, res) {
 
     if (b.action === 'status') {
       const day = riyadh().day;
-      const [rec, perms, site, closed] = await Promise.all([todayRecord(user.email), permsOrNull(), siteVisitToday(user.email), closedReason(day)]);
+      const [rec, perms, site, closed, morning] = await Promise.all([todayRecord(user.email), permsOrNull(), siteVisitToday(user.email), closedReason(day), morningLeave(user.email, day)]);
       const shortLeaveMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
         .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
-      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site), shortLeaveMin, closed: site || closed === 'Saturday' ? null : closed, optional: closed === 'Saturday' },
+      return res.status(200).json({ ok: true, name, email: user.email, today: { ...summary(rec, site, morning), shortLeaveMin, closed: site || closed === 'Saturday' ? null : closed, optional: closed === 'Saturday' },
         perm: perms ? permSummary(perms, user.email) : null, pushKey: vapidKeys() ? env('VAPID_PUBLIC_KEY') : null,
         admin: !!staff.admin, notStaff: !!staff.notStaff });
     }
@@ -1370,13 +1431,14 @@ module.exports = async function handler(req, res) {
       const p = win.anywhere ? checkPlaceAnywhere(b) : checkPlace(b);
       if (await todayRecord(user.email)) throw new HttpError(409, 'You have already checked in today.');
       const { day, time } = riyadh();
-      const rules = dayRules();
+      const morning = await morningLeave(user.email, day);
+      const rules = rulesFor(morning);
       if (!win.waiveLate && !isSaturday(day) && toMin(time) > rules.closesMin) {
         throw new HttpError(409, `Check-in closed at ${rules.closes}. Today is recorded as absent unless you have approved leave — please speak to your manager.`);
       }
       const row = [day, user.email, name, time, p.distance, p.accuracy, p.lat, p.lng, '', '', '', '', '', ''];
       await graph('POST', '/tables/Attendance/rows', { values: [row] });
-      return res.status(200).json({ ok: true, today: summary({ row }, site) });
+      return res.status(200).json({ ok: true, today: summary({ row }, site, morning) });
     }
 
     if (b.action === 'checkOut') {
@@ -1390,7 +1452,7 @@ module.exports = async function handler(req, res) {
       const perms = await permsOrNull();
       if (perms) await closeOpenPerm(perms, user.email, time); // stepped out and went home
       // short leave actually taken today (stepped out and back) is not working time
-      const shortMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in)
+      const shortMin = perms ? perms.filter((x) => x.email === user.email && x.date === day && x.out && x.in && !x.morning)
         .reduce((a, x) => a + (Number(x.minutes) || 0), 0) : 0;
       const [ih, im] = String(rec.row[3]).split(':').map(Number);
       const [oh, om] = time.split(':').map(Number);
@@ -1398,7 +1460,7 @@ module.exports = async function handler(req, res) {
       const row = rec.row.slice(0, LOG_COLUMNS);
       row.splice(8, 6, time, p.distance, p.accuracy, p.lat, p.lng, hours);
       await graph('PATCH', `/tables/Attendance/rows/itemAt(index=${rec.index})`, { values: [row] });
-      return res.status(200).json({ ok: true, today: { ...summary({ row }, site), shortLeaveMin: shortMin }, perm: perms ? permSummary(perms, user.email) : null });
+      return res.status(200).json({ ok: true, today: { ...summary({ row }, site, await morningLeave(user.email, day)), shortLeaveMin: shortMin }, perm: perms ? permSummary(perms, user.email) : null });
     }
 
     if (String(b.action || '').startsWith('admin')) return res.status(200).json(await handleAdmin(b, staff, team));
