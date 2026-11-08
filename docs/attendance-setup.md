@@ -262,3 +262,12 @@ To make more admins, set the Vercel env var `ADMIN_EMAILS` (comma-separated). It
 `office@adas.com.sa`. Editing a field needs its column in the Staff table (`Joining Date`,
 `Annual Days`, `Opening Balance`, `Manager`, `Role`), and adjustments need the `Type` column in the
 Leave table. The panel tells you if one is missing.
+
+## Short leave (morning)
+
+For an appointment before work, staff choose **Short leave (morning)** in the leave form. They pick the
+day and the time they'll arrive (up to 10:30), and can send it in advance or that same morning before
+checking in. It goes to their manager like other leave. It uses the short-leave allowance (1.5 h a day,
+6 h a week) and never annual days. Once approved, that day's start time moves to their arrival time,
+so they're on time if they check in by arrival + 15 min. The Leave table row has Type =
+`Short leave (morning)`, Days = 0, and the note `[09:00–10:30] reason`. Needs the `Type` column.

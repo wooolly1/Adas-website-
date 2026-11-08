@@ -3398,7 +3398,9 @@ function leaveDays(start, end, holidays = []) {
   }
   return { days: n, skipped };
 }
-const LEAVE_LABELS = { annual: 'Annual', sick: 'Sick', marriage: 'Marriage', bereavement: 'Funeral', paternity: 'New baby', hajj: 'Hajj', unpaid: 'Unpaid', site: 'Site visit' };
+const LEAVE_LABELS = { annual: 'Annual', sick: 'Sick', marriage: 'Marriage', bereavement: 'Funeral', paternity: 'New baby', hajj: 'Hajj', unpaid: 'Unpaid', site: 'Site visit', morning: 'Short leave (morning)' };
+/* how long a request is: "3d", or the arrival time for morning short leave */
+const leaveLen = (l, long) => (l.type === 'morning' ? `arrives ${l.siteTo || ''}` : long ? `${l.days} day${l.days === 1 ? '' : 's'}` : `${l.days}d`);
 const leaveTypeLabel = (t) => LEAVE_LABELS[t] || 'Annual';
 const fmtLeaveDate = (iso) => (iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
 const LEAVE_TONE = {
@@ -3412,6 +3414,8 @@ function AnnualLeave({ managerOnly = false }) {
   const [end, setEnd] = useState('');
   const [note, setNote] = useState('');
   const [type, setType] = useState('annual');
+  const [mDate, setMDate] = useState('');
+  const [mTo, setMTo] = useState('10:00');
   const nowHM = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Riyadh' });
   const roundUp = (hm, add = 0) => { const [h, m] = hm.split(':').map(Number); const t = Math.min(23 * 60 + 30, Math.ceil((h * 60 + m) / 30) * 30 + add); return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
   const [siteFrom, setSiteFrom] = useState(() => roundUp(nowHM()));
@@ -3457,12 +3461,14 @@ function AnnualLeave({ managerOnly = false }) {
   const submit = async (e) => {
     e.preventDefault();
     const to = data && data.approvers && data.approvers.length ? data.approvers.join(' or ') : 'your manager';
-    const body = type === 'site' ? { action: 'leaveRequest', type, from: siteFrom, to: siteTo, note } : { action: 'leaveRequest', type, start, end, note };
+    const body = type === 'site' ? { action: 'leaveRequest', type, from: siteFrom, to: siteTo, note }
+      : type === 'morning' ? { action: 'leaveRequest', type, date: mDate, to: mTo, note }
+      : { action: 'leaveRequest', type, start, end, note };
     if (type === 'sick' && pdf) body.attachment = { name: pdf.name, data: pdf.data };
     const ok = await run('request', body, (r) => (r.attachment === 'failed'
       ? `Request sent to ${to}, but the PDF could not be emailed — please give it to HR.`
       : `Request sent to ${to}${r.attachment === 'sent' ? ' with the medical report attached' : ''}.`));
-    if (ok) { setStart(''); setEnd(''); setNote(''); setType('annual'); setPdf(null); }
+    if (ok) { setStart(''); setEnd(''); setNote(''); setType('annual'); setPdf(null); setMDate(''); }
   };
   const inputCls = 'mt-2 w-full rounded-none border-0 border-b border-ink-900/12 bg-transparent px-0 py-3 text-ink-900 outline-none focus:border-gold-400 focus:ring-0 [color-scheme:light] dark:[color-scheme:dark]';
   const btn = 'magnetic-btn inline-flex items-center justify-center rounded-full px-5 py-3 text-[11px] uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-40';
@@ -3499,7 +3505,7 @@ function AnnualLeave({ managerOnly = false }) {
           </div>
 
           <form onSubmit={submit} className="mt-8 space-y-5 border-t border-ink-900/10 pt-6">
-            <p className="font-display text-2xl text-ink-900">{type === 'site' ? 'Request a site visit' : 'Request leave'}</p>
+            <p className="font-display text-2xl text-ink-900">{type === 'site' ? 'Request a site visit' : type === 'morning' ? 'Request short leave' : 'Request leave'}</p>
             {data.types && data.typeColumn && (
               <div>
                 <span className="stamp text-ink-700/60">Type</span>
@@ -3521,7 +3527,16 @@ function AnnualLeave({ managerOnly = false }) {
                 )}
               </div>
             )}
-            {type === 'site' ? (
+            {type === 'morning' ? (
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block"><span className="stamp text-ink-700/60">Day</span>
+                  <input type="date" required min={todayIso} value={mDate} onChange={(e) => setMDate(e.target.value)} className={inputCls} />
+                </label>
+                <label className="block"><span className="stamp text-ink-700/60">Arriving at</span>
+                  <input type="time" required value={mTo} step={900} min="09:15" max="10:30" onChange={(e) => setMTo(e.target.value)} className={inputCls} />
+                </label>
+              </div>
+            ) : type === 'site' ? (
               <div className="grid grid-cols-2 gap-4">
                 <label className="block"><span className="stamp text-ink-700/60">Today from</span>
                   <input type="time" required value={siteFrom} step={900} onChange={(e) => setSiteFrom(e.target.value)} className={inputCls} />
@@ -3555,17 +3570,23 @@ function AnnualLeave({ managerOnly = false }) {
                 <p className="mt-1 text-xs text-ink-800/60">It's emailed to your manager with the request.</p>
               </div>
             )}
-            <label className="block"><span className="stamp text-ink-700/60">{type === 'site' ? 'Site / client (required)' : 'Note (optional)'}</span>
+            <label className="block"><span className="stamp text-ink-700/60">{type === 'site' ? 'Site / client (required)' : type === 'morning' ? 'Reason (optional)' : 'Note (optional)'}</span>
               <input type="text" maxLength={300} value={note} required={type === 'site'} onChange={(e) => setNote(e.target.value)}
-                placeholder={type === 'site' ? 'e.g. Al Rawdah villa — site meeting' : 'e.g. family travel'} className={inputCls + ' placeholder:text-ink-700/40'} />
+                placeholder={type === 'site' ? 'e.g. Al Rawdah villa — site meeting' : type === 'morning' ? 'e.g. doctor\'s appointment' : 'e.g. family travel'} className={inputCls + ' placeholder:text-ink-700/40'} />
             </label>
+            {type === 'morning' && mDate && (() => {
+              const min = (Number(mTo.slice(0, 2)) * 60 + Number(mTo.slice(3))) - 9 * 60;
+              const bad = min <= 0 ? 'Choose a time after 09:00.' : min > 90 ? 'Short leave is up to 1.5 h a day, so arrive by 10:30 at the latest.' : '';
+              const grace = (() => { const t = Number(mTo.slice(0, 2)) * 60 + Number(mTo.slice(3)) + 15; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; })();
+              return <p className={'text-sm ' + (bad ? 'text-red-700' : 'text-ink-800/80')}>{bad || `${fmtLeaveDate(mDate)} · arrive at ${mTo} · ${min} min of short leave. Once approved, you're on time if you check in by ${grace}.`}</p>;
+            })()}
             {type === 'site' && (
               <p className={'text-sm ' + (siteTo <= siteFrom ? 'text-red-700' : 'text-ink-800/80')}>
                 {siteTo <= siteFrom ? 'The end time must be after the start time.'
                   : `Today ${siteFrom}–${siteTo} at the site · counts as worked. You can check in or out from the site during these hours.`}
               </p>
             )}
-            {type !== 'site' && start && end && (
+            {type !== 'site' && type !== 'morning' && start && end && (
               <p className={'text-sm ' + (overLimit ? 'text-red-700' : 'text-ink-800/80')}>
                 {days === 0 ? 'No working days in these dates (weekends and public holidays don\'t count).'
                   : isAnnual ? `${days} working day${days === 1 ? '' : 's'} · ${Math.max(0, bal.remaining - days)} would remain`
@@ -3578,7 +3599,7 @@ function AnnualLeave({ managerOnly = false }) {
                 {skipped.length > 0 && <span className="block text-xs text-ink-800/60">Not counted: {skipped.join(', ')}</span>}
               </p>
             )}
-            <button type="submit" disabled={!!busy || (type === 'site' ? (!note.trim() || siteTo <= siteFrom) : (!days || (isAnnual ? (days > bal.remaining && !bal.earning) : overLimit)))} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
+            <button type="submit" disabled={!!busy || (type === 'morning' ? (!mDate || !(mTo > '09:00' && mTo <= '10:30')) : type === 'site' ? (!note.trim() || siteTo <= siteFrom) : (!days || (isAnnual ? (days > bal.remaining && !bal.earning) : overLimit)))} className={btn + ' w-full bg-gold-400 text-ink-950 hover:bg-gold-300'}>
               {busy === 'request' ? 'Sending…' : 'Send to manager'}
             </button>
             <p className="text-center text-xs text-ink-800/60">
@@ -3609,7 +3630,7 @@ function AnnualLeave({ managerOnly = false }) {
                 {data.requests.map((l) => (
                   <li key={l.id} className="flex items-center justify-between gap-3 py-3">
                     <div>
-                      <p className="text-ink-900">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} <span className="text-ink-800/60">· {l.days}d{l.type && l.type !== 'annual' ? ` · ${leaveTypeLabel(l.type)}` : ''}</span></p>
+                      <p className="text-ink-900">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} <span className="text-ink-800/60">· {leaveLen(l)}{l.type && l.type !== 'annual' ? ` · ${leaveTypeLabel(l.type)}` : ''}</span></p>
                       {l.note && <p className="text-xs text-ink-800/60">{l.note}</p>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -3636,7 +3657,7 @@ function AnnualLeave({ managerOnly = false }) {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-ink-900">{l.name} <span className="ml-1 rounded-full bg-ink-900/5 px-2 py-0.5 text-[11px] text-ink-800/70">{leaveTypeLabel(l.type)}</span></p>
-                          <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {l.days} day{l.days === 1 ? '' : 's'}</p>
+                          <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {leaveLen(l, true)}</p>
                           {l.note && <p className="mt-1 text-xs text-ink-800/60">“{l.note}”</p>}
                         </div>
                         {l.remaining != null && (!l.type || l.type === 'annual') && <span className="shrink-0 text-xs text-ink-800/60">{l.remaining} days left</span>}
@@ -3659,7 +3680,7 @@ function AnnualLeave({ managerOnly = false }) {
                       <li key={l.id} className="flex items-center justify-between gap-3 py-3">
                         <div>
                           <p className="text-ink-900">{l.name}</p>
-                          <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {l.days}d · {leaveTypeLabel(l.type)}</p>
+                          <p className="text-sm text-ink-800/70">{fmtLeaveDate(l.start)}{l.end !== l.start && ` — ${fmtLeaveDate(l.end)}`} · {leaveLen(l)} · {leaveTypeLabel(l.type)}</p>
                         </div>
                         <button onClick={() => { if (window.confirm(`Cancel ${l.name}'s approved leave (${fmtLeaveDate(l.start)} — ${fmtLeaveDate(l.end)})? The days go back to their balance.`)) run('c-' + l.id, { action: 'leaveCancel', id: l.id }, `Cancelled ${l.name}'s leave.`); }}
                           disabled={!!busy} className="stamp shrink-0 text-ink-700/60 hover:text-red-700">Cancel leave</button>
@@ -3811,6 +3832,7 @@ function ManagerDashboard() {
                     {d.status === 'site' && <span>{d.note}{d.siteFrom ? ` (${d.siteFrom}–${d.siteTo})` : ''}{d.in ? ' · ' : d.noCheckin ? ' · no check-in yet' : ''}</span>}
                     {d.in ? `${d.in}${d.out ? ` — ${d.out}` : ''}${d.hours ? ` · ${d.hours}h` : ''}${d.lateMin ? ` · ${d.lateMin} min late` : ''}${d.shortMin ? ` · ${d.shortMin} min short leave` : ''}` : (d.status === 'leave' ? 'Approved leave' : d.status === 'site' ? '' : d.note || '')}
                     {d.outNow && <span className="text-lilac-600"> · out since {d.outNow}</span>}
+                    {d.morningUntil && <span className="text-gold-700">{d.in || d.note ? ' · ' : ''}morning short leave, arrives {d.morningUntil}</span>}
                   </p>
                   {(d.inLoc || d.outLoc) && (
                     <p className="mt-1 flex flex-wrap gap-3 text-xs">
@@ -4504,7 +4526,7 @@ function TeamPage() {
                   if (nowHM > rules.closes) {
                     return <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-sm text-red-700">Check-in closed at {rules.closes}. Today is recorded as absent unless you have approved leave — please speak to your manager.</p>;
                   }
-                  return <p className="mt-3 text-xs text-ink-800/70">On time until {rules.lateAfter} · late until {rules.closes} · after {rules.closes} check-in closes{nowHM > rules.lateAfter ? ' — you are now late' : ''}.</p>;
+                  return <p className="mt-3 text-xs text-ink-800/70">{rules.morningUntil && <span className="mb-1 block text-sm text-gold-700">Short leave approved: arrive by {rules.morningUntil}.</span>}On time until {rules.lateAfter} · late until {rules.closes} · after {rules.closes} check-in closes{nowHM > rules.lateAfter ? ' — you are now late' : ''}.</p>;
                 })()}
 
                 {today.checkIn && today.checkOut ? (
